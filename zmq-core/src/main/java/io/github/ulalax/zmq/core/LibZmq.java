@@ -260,7 +260,7 @@ public final class LibZmq {
     public static String strerror(int errnum) {
         try {
             MemorySegment ptr = (MemorySegment) zmq_strerror.invokeExact(errnum);
-            return ptr.reinterpret(Long.MAX_VALUE).getUtf8String(0);
+            return ptr.reinterpret(Long.MAX_VALUE).getString(0);
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
@@ -487,7 +487,7 @@ public final class LibZmq {
      */
     public static int bind(MemorySegment socket, String addr) {
         try (Arena arena = Arena.ofConfined()) {
-            MemorySegment addrSeg = arena.allocateUtf8String(addr);
+            MemorySegment addrSeg = arena.allocateFrom(addr);
             return (int) zmq_bind.invokeExact(socket, addrSeg);
         } catch (Throwable e) {
             throw new RuntimeException(e);
@@ -512,7 +512,7 @@ public final class LibZmq {
      */
     public static int connect(MemorySegment socket, String addr) {
         try (Arena arena = Arena.ofConfined()) {
-            MemorySegment addrSeg = arena.allocateUtf8String(addr);
+            MemorySegment addrSeg = arena.allocateFrom(addr);
             return (int) zmq_connect.invokeExact(socket, addrSeg);
         } catch (Throwable e) {
             throw new RuntimeException(e);
@@ -536,7 +536,7 @@ public final class LibZmq {
      */
     public static int unbind(MemorySegment socket, String addr) {
         try (Arena arena = Arena.ofConfined()) {
-            MemorySegment addrSeg = arena.allocateUtf8String(addr);
+            MemorySegment addrSeg = arena.allocateFrom(addr);
             return (int) zmq_unbind.invokeExact(socket, addrSeg);
         } catch (Throwable e) {
             throw new RuntimeException(e);
@@ -560,7 +560,7 @@ public final class LibZmq {
      */
     public static int disconnect(MemorySegment socket, String addr) {
         try (Arena arena = Arena.ofConfined()) {
-            MemorySegment addrSeg = arena.allocateUtf8String(addr);
+            MemorySegment addrSeg = arena.allocateFrom(addr);
             return (int) zmq_disconnect.invokeExact(socket, addrSeg);
         } catch (Throwable e) {
             throw new RuntimeException(e);
@@ -690,7 +690,7 @@ public final class LibZmq {
     public static int socketMonitor(MemorySegment socket, String addr, int events) {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment addrSeg = addr != null ?
-                arena.allocateUtf8String(addr) : MemorySegment.NULL;
+                arena.allocateFrom(addr) : MemorySegment.NULL;
             return (int) zmq_socket_monitor.invokeExact(socket, addrSeg, events);
         } catch (Throwable e) {
             throw new RuntimeException(e);
@@ -1022,12 +1022,12 @@ public final class LibZmq {
      */
     public static String msgGets(MemorySegment msg, String property) {
         try (Arena arena = Arena.ofConfined()) {
-            MemorySegment propSeg = arena.allocateUtf8String(property);
+            MemorySegment propSeg = arena.allocateFrom(property);
             MemorySegment result = (MemorySegment) zmq_msg_gets.invokeExact(msg, propSeg);
             if (result.address() == 0) {
                 return null;
             }
-            return result.reinterpret(Long.MAX_VALUE).getUtf8String(0);
+            return result.reinterpret(Long.MAX_VALUE).getString(0);
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
@@ -1128,7 +1128,7 @@ public final class LibZmq {
      */
     public static int has(String capability) {
         try (Arena arena = Arena.ofConfined()) {
-            MemorySegment capSeg = arena.allocateUtf8String(capability);
+            MemorySegment capSeg = arena.allocateFrom(capability);
             return (int) zmq_has.invokeExact(capSeg);
         } catch (Throwable e) {
             throw new RuntimeException(e);

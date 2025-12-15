@@ -89,7 +89,7 @@ public final class Z85 {
             }
 
             // Convert to Java string (null-terminated)
-            return destSeg.getUtf8String(0);
+            return destSeg.getString(0);
         }
     }
 
@@ -123,7 +123,7 @@ public final class Z85 {
             int outputSize = encoded.length() * 4 / 5;
 
             // Allocate buffers
-            MemorySegment encodedSeg = arena.allocateUtf8String(encoded);
+            MemorySegment encodedSeg = arena.allocateFrom(encoded);
             MemorySegment destSeg = arena.allocate(outputSize);
 
             // Decode

@@ -85,8 +85,8 @@ public final class Curve {
             ZmqException.throwIfError(result);
 
             // Convert to Java strings (null-terminated C strings)
-            String publicKeyStr = publicKey.getUtf8String(0);
-            String secretKeyStr = secretKey.getUtf8String(0);
+            String publicKeyStr = publicKey.getString(0);
+            String secretKeyStr = secretKey.getString(0);
 
             return new KeyPair(publicKeyStr, secretKeyStr);
         }
@@ -120,14 +120,14 @@ public final class Curve {
         try (Arena arena = Arena.ofConfined()) {
             // Allocate buffers
             MemorySegment publicKey = arena.allocate(Z85_KEY_SIZE);
-            MemorySegment secretKeySeg = arena.allocateUtf8String(secretKey);
+            MemorySegment secretKeySeg = arena.allocateFrom(secretKey);
 
             // Derive public key
             int result = LibZmq.curvePublic(publicKey, secretKeySeg);
             ZmqException.throwIfError(result);
 
             // Convert to Java string
-            return publicKey.getUtf8String(0);
+            return publicKey.getString(0);
         }
     }
 

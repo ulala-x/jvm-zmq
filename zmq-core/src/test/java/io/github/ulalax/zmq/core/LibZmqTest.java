@@ -202,7 +202,7 @@ class LibZmqTest {
                 // When: Client sends message
                 String testMsg = "Hello ZMQ";
                 byte[] data = testMsg.getBytes();
-                MemorySegment sendBuf = arena.allocateArray(java.lang.foreign.ValueLayout.JAVA_BYTE, data);
+                MemorySegment sendBuf = arena.allocateFrom(java.lang.foreign.ValueLayout.JAVA_BYTE, data);
 
                 int rc = LibZmq.send(client, sendBuf, data.length, 0);
                 assertThat(rc).as("Bytes sent").isGreaterThan(0);

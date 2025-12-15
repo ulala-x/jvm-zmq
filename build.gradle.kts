@@ -18,7 +18,7 @@ subprojects {
 
     java {
         toolchain {
-            languageVersion.set(JavaLanguageVersion.of(21))
+            languageVersion.set(JavaLanguageVersion.of(22))
         }
         withSourcesJar()
         withJavadocJar()
@@ -26,18 +26,14 @@ subprojects {
 
     tasks.withType<JavaCompile> {
         options.encoding = "UTF-8"
-        options.release.set(21)
-        // Enable preview features for FFM API (Java 21)
-        options.compilerArgs.addAll(listOf("--enable-preview"))
+        options.release.set(22)
     }
 
     tasks.withType<Test> {
         useJUnitPlatform()
         jvmArgs(
             // Enable native access for FFM
-            "--enable-native-access=ALL-UNNAMED",
-            // Enable preview features for FFM API
-            "--enable-preview"
+            "--enable-native-access=ALL-UNNAMED"
         )
     }
 
@@ -45,9 +41,7 @@ subprojects {
         options.encoding = "UTF-8"
         (options as StandardJavadocDocletOptions).apply {
             addStringOption("Xdoclint:none", "-quiet")
-            // Enable preview features for FFM API
-            addBooleanOption("-enable-preview", true)
-            addStringOption("-release", "21")
+            addStringOption("-release", "22")
         }
     }
 
