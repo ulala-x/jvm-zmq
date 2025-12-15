@@ -4,7 +4,38 @@ import java.lang.foreign.MemorySegment;
 
 /**
  * Exception thrown when a ZeroMQ operation fails.
- * Contains the error number and message from libzmq.
+ * <p>
+ * This exception wraps error information from libzmq, including the error number (errno)
+ * and a descriptive error message. It extends {@link RuntimeException} so it does not
+ * need to be explicitly caught.
+ * </p>
+ *
+ * <h2>Usage Example:</h2>
+ * <pre>{@code
+ * try {
+ *     int rc = LibZmq.bind(socket, "tcp://*:5555");
+ *     ZmqException.throwIfError(rc);
+ * } catch (ZmqException e) {
+ *     if (e.isAgain()) {
+ *         // Would block, retry later
+ *     } else if (e.isTerminated()) {
+ *         // Context was terminated
+ *     } else {
+ *         System.err.println("Error: " + e.getMessage());
+ *     }
+ * }
+ * }</pre>
+ *
+ * <h2>Common Error Types:</h2>
+ * <ul>
+ *   <li>{@link #isAgain()} - Operation would block (EAGAIN)</li>
+ *   <li>{@link #isTerminated()} - Context was terminated (ETERM)</li>
+ *   <li>{@link #isInterrupted()} - Operation was interrupted (EINTR)</li>
+ * </ul>
+ *
+ * @see LibZmq
+ * @see ZmqConstants
+ * @since 1.0.0
  */
 public class ZmqException extends RuntimeException {
 

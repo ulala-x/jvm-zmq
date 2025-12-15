@@ -265,13 +265,52 @@ public final class Proxy {
             this.frontendBytesSent = frontendBytesSent;
         }
 
+        /**
+         * Gets the number of messages received on the frontend socket.
+         * @return Message count
+         */
         public long getFrontendMessagesReceived() { return frontendMessagesReceived; }
+
+        /**
+         * Gets the number of bytes received on the frontend socket.
+         * @return Byte count
+         */
         public long getFrontendBytesReceived() { return frontendBytesReceived; }
+
+        /**
+         * Gets the number of messages sent to the backend socket.
+         * @return Message count
+         */
         public long getBackendMessagesSent() { return backendMessagesSent; }
+
+        /**
+         * Gets the number of bytes sent to the backend socket.
+         * @return Byte count
+         */
         public long getBackendBytesSent() { return backendBytesSent; }
+
+        /**
+         * Gets the number of messages received on the backend socket.
+         * @return Message count
+         */
         public long getBackendMessagesReceived() { return backendMessagesReceived; }
+
+        /**
+         * Gets the number of bytes received on the backend socket.
+         * @return Byte count
+         */
         public long getBackendBytesReceived() { return backendBytesReceived; }
+
+        /**
+         * Gets the number of messages sent to the frontend socket.
+         * @return Message count
+         */
         public long getFrontendMessagesSent() { return frontendMessagesSent; }
+
+        /**
+         * Gets the number of bytes sent to the frontend socket.
+         * @return Byte count
+         */
         public long getFrontendBytesSent() { return frontendBytesSent; }
 
         @Override
