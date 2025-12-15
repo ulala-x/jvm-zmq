@@ -87,5 +87,20 @@ subprojects {
                 }
             }
         }
+
+        repositories {
+            // Publish to local Maven repository
+            mavenLocal()
+
+            // Publish to GitHub Packages
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/ulala-x/jvm-zmq")
+                credentials {
+                    username = System.getenv("GITHUB_ACTOR") ?: findProperty("gpr.user") as String? ?: ""
+                    password = System.getenv("GITHUB_TOKEN") ?: findProperty("gpr.token") as String? ?: ""
+                }
+            }
+        }
     }
 }
