@@ -37,6 +37,13 @@ public final class Socket implements AutoCloseable {
     private final Cleaner.Cleanable cleanable;
     private volatile boolean closed = false;
 
+    // I/O Arena for send/recv operations to avoid repeated Arena allocations
+    private final Arena ioArena;
+    private MemorySegment sendBuffer;
+    private MemorySegment recvBuffer;
+    private int sendBufferSize = 8192; // Default 8KB
+    private int recvBufferSize = 8192; // Default 8KB
+
     /**
      * Creates a new ZMQ socket.
      * @param context The context to create the socket in
@@ -52,6 +59,11 @@ public final class Socket implements AutoCloseable {
         this.handle = LibZmq.socket(context.getHandle(), type.getValue());
         ZmqException.throwIfNull(handle);
         this.cleanable = CLEANER.register(this, new SocketCleanup(handle));
+
+        // Initialize I/O Arena and buffers for send/recv operations
+        this.ioArena = Arena.ofConfined();
+        this.sendBuffer = ioArena.allocate(sendBufferSize);
+        this.recvBuffer = ioArena.allocate(recvBufferSize);
     }
 
     /**
@@ -154,13 +166,15 @@ public final class Socket implements AutoCloseable {
         if (data == null) {
             throw new NullPointerException("data cannot be null");
         }
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment seg = arena.allocate(data.length);
-            MemorySegment.copy(data, 0, seg, ValueLayout.JAVA_BYTE, 0, data.length);
-            int result = LibZmq.send(getHandle(), seg, data.length, flags.getValue());
-            ZmqException.throwIfError(result);
-            return result;
+        // Expand buffer if needed
+        if (data.length > sendBufferSize) {
+            sendBuffer = ioArena.allocate(data.length);
+            sendBufferSize = data.length;
         }
+        MemorySegment.copy(data, 0, sendBuffer, ValueLayout.JAVA_BYTE, 0, data.length);
+        int result = LibZmq.send(getHandle(), sendBuffer, data.length, flags.getValue());
+        ZmqException.throwIfError(result);
+        return result;
     }
 
     /**
@@ -209,15 +223,27 @@ public final class Socket implements AutoCloseable {
         if (buffer == null) {
             throw new NullPointerException("buffer cannot be null");
         }
-        try (Arena arena = Arena.ofConfined()) {
-            int remaining = buffer.remaining();
-            MemorySegment seg = arena.allocate(remaining);
-            MemorySegment.copy(buffer, 0, seg, ValueLayout.JAVA_BYTE, 0, remaining);
-            int result = LibZmq.send(getHandle(), seg, remaining, flags.getValue());
+        int remaining = buffer.remaining();
+        int result;
+
+        if (buffer.isDirect()) {
+            // DirectByteBuffer: use MemorySegment.ofBuffer() for zero-copy
+            MemorySegment seg = MemorySegment.ofBuffer(buffer);
+            result = LibZmq.send(getHandle(), seg, remaining, flags.getValue());
             ZmqException.throwIfError(result);
             buffer.position(buffer.position() + result);
-            return result;
+        } else {
+            // Heap ByteBuffer: copy to sendBuffer
+            if (remaining > sendBufferSize) {
+                sendBuffer = ioArena.allocate(remaining);
+                sendBufferSize = remaining;
+            }
+            MemorySegment.copy(buffer, 0, sendBuffer, ValueLayout.JAVA_BYTE, 0, remaining);
+            result = LibZmq.send(getHandle(), sendBuffer, remaining, flags.getValue());
+            ZmqException.throwIfError(result);
+            buffer.position(buffer.position() + result);
         }
+        return result;
     }
 
     /**
@@ -272,13 +298,15 @@ public final class Socket implements AutoCloseable {
         if (buffer == null) {
             throw new NullPointerException("buffer cannot be null");
         }
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment seg = arena.allocate(buffer.length);
-            int result = LibZmq.recv(getHandle(), seg, buffer.length, flags.getValue());
-            ZmqException.throwIfError(result);
-            MemorySegment.copy(seg, ValueLayout.JAVA_BYTE, 0, buffer, 0, result);
-            return result;
+        // Expand buffer if needed
+        if (buffer.length > recvBufferSize) {
+            recvBuffer = ioArena.allocate(buffer.length);
+            recvBufferSize = buffer.length;
         }
+        int result = LibZmq.recv(getHandle(), recvBuffer, buffer.length, flags.getValue());
+        ZmqException.throwIfError(result);
+        MemorySegment.copy(recvBuffer, ValueLayout.JAVA_BYTE, 0, buffer, 0, result);
+        return result;
     }
 
     /**
@@ -661,6 +689,10 @@ public final class Socket implements AutoCloseable {
     public void close() {
         if (!closed) {
             closed = true;
+            // Release I/O Arena before closing socket
+            if (ioArena != null) {
+                ioArena.close();
+            }
             cleanable.clean();
         }
     }
