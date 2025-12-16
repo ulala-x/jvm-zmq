@@ -4,11 +4,11 @@
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.ulalax/zmq.svg)](https://search.maven.org/artifact/io.github.ulalax/zmq)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Modern Java bindings for ZeroMQ using JDK 21+ FFM (Foreign Function & Memory) API.
+A modern Java binding for ZeroMQ (libzmq) using JDK 22+ FFM (Foreign Function & Memory) API.
 
 ## Features
 
-- **Java 21 FFM API**: Direct native library binding without JNI overhead, using Foreign Function & Memory API
+- **Java 22 FFM API**: Direct native library binding without JNI overhead, using stable Foreign Function & Memory API
 - **Type-Safe API**: Strongly-typed enums, socket options, and message handling
 - **Resource-Safe**: AutoCloseable resources with Cleaner-based automatic finalization
 - **Cross-Platform**: Bundled native libraries for Windows, Linux, and macOS (x86_64 and ARM64)
@@ -37,15 +37,6 @@ dependencies {
 
 **Important**: Enable native access when running your application:
 
-```kotlin
-// build.gradle.kts
-tasks.withType<JavaExec> {
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
-}
-```
-
-Or via command line:
-
 ```bash
 java --enable-native-access=ALL-UNNAMED -jar your-app.jar
 ```
@@ -57,28 +48,21 @@ java --enable-native-access=ALL-UNNAMED -jar your-app.jar
 ```java
 import io.github.ulalax.zmq.*;
 
-public class ReqRepExample {
-    public static void main(String[] args) throws Exception {
-        try (Context ctx = new Context();
-             Socket server = new Socket(ctx, SocketType.REP);
-             Socket client = new Socket(ctx, SocketType.REQ)) {
+// Server
+try (Context ctx = new Context();
+     Socket server = new Socket(ctx, SocketType.REP)) {
+    server.bind("tcp://*:5555");
 
-            server.bind("tcp://*:5555");
-            client.connect("tcp://localhost:5555");
+    String request = server.recvString();
+    server.send("World");
+}
 
-            // Client sends request
-            client.send("Hello");
-
-            // Server receives and replies
-            String request = server.recvString();
-            System.out.println("Server received: " + request);
-            server.send("World");
-
-            // Client receives reply
-            String reply = client.recvString();
-            System.out.println("Client received: " + reply);
-        }
-    }
+// Client
+try (Context ctx = new Context();
+     Socket client = new Socket(ctx, SocketType.REQ)) {
+    client.connect("tcp://localhost:5555");
+    client.send("Hello");
+    String reply = client.recvString();
 }
 ```
 
@@ -90,114 +74,79 @@ import io.github.ulalax.zmq.*;
 // Publisher
 try (Context ctx = new Context();
      Socket pub = new Socket(ctx, SocketType.PUB)) {
-
     pub.bind("tcp://*:5556");
-    Thread.sleep(100); // Give time for subscribers to connect
     pub.send("topic1 Hello subscribers!");
 }
 
 // Subscriber
 try (Context ctx = new Context();
      Socket sub = new Socket(ctx, SocketType.SUB)) {
-
     sub.connect("tcp://localhost:5556");
     sub.subscribe("topic1");
     String message = sub.recvString();
-    System.out.println("Received: " + message);
 }
 ```
 
-### ROUTER-DEALER Pattern
+### Router-to-Router Pattern
 
 ```java
 import io.github.ulalax.zmq.*;
 import java.nio.charset.StandardCharsets;
 
 try (Context ctx = new Context();
-     Socket router = new Socket(ctx, SocketType.ROUTER);
-     Socket dealer = new Socket(ctx, SocketType.DEALER)) {
+     Socket peerA = new Socket(ctx, SocketType.ROUTER);
+     Socket peerB = new Socket(ctx, SocketType.ROUTER)) {
 
-    // Set dealer identity
-    dealer.setOption(SocketOption.ROUTING_ID, "CLIENT1".getBytes(StandardCharsets.UTF_8));
+    // Set explicit identities for Router-to-Router
+    peerA.setOption(SocketOption.ROUTING_ID, "PEER_A".getBytes(StandardCharsets.UTF_8));
+    peerB.setOption(SocketOption.ROUTING_ID, "PEER_B".getBytes(StandardCharsets.UTF_8));
 
-    router.bind("tcp://127.0.0.1:5555");
-    dealer.connect("tcp://127.0.0.1:5555");
-    Thread.sleep(100);
+    peerA.bind("tcp://127.0.0.1:5555");
+    peerB.connect("tcp://127.0.0.1:5555");
 
-    // Dealer sends to Router
-    dealer.send("Hello from Dealer!");
+    // Peer B sends to Peer A (first frame = target identity)
+    peerB.send("PEER_A".getBytes(StandardCharsets.UTF_8), SendFlags.SEND_MORE);
+    peerB.send("Hello from Peer B!");
 
-    // Router receives (first frame = sender identity)
-    byte[] identity = router.recvBytes();
-    String message = router.recvString();
+    // Peer A receives (first frame = sender identity)
+    byte[] senderId = peerA.recvBytes();
+    String message = peerA.recvString();
 
-    // Router replies using sender's identity
-    router.send(identity, SendFlags.SEND_MORE);
-    router.send("Hello back from Router!");
-
-    // Dealer receives reply
-    String reply = dealer.recvString();
-    System.out.println("Dealer received: " + reply);
+    // Peer A replies using sender's identity
+    peerA.send(senderId, SendFlags.SEND_MORE);
+    peerA.send("Hello back from Peer A!");
 }
 ```
 
-### Polling Multiple Sockets
+### Polling
 
 ```java
 import io.github.ulalax.zmq.*;
 
-try (Context ctx = new Context();
-     Socket socket1 = new Socket(ctx, SocketType.PULL);
-     Socket socket2 = new Socket(ctx, SocketType.PULL)) {
+PollItem[] items = new PollItem[] {
+    new PollItem(socket1, PollEvents.IN),
+    new PollItem(socket2, PollEvents.IN)
+};
 
-    socket1.bind("tcp://*:5558");
-    socket2.bind("tcp://*:5559");
-
-    PollItem[] items = {
-        new PollItem(socket1, PollEvents.IN),
-        new PollItem(socket2, PollEvents.IN)
-    };
-
-    // Wait for events with 1 second timeout
-    int ready = Poller.poll(items, 1000);
-
-    if (items[0].isReadable()) {
-        byte[] data = socket1.recvBytes();
-        // Process data from socket1
-    }
-
-    if (items[1].isReadable()) {
-        byte[] data = socket2.recvBytes();
-        // Process data from socket2
-    }
+if (Poller.poll(items, 1000) > 0) {
+    if (items[0].isReadable()) { /* handle socket1 */ }
+    if (items[1].isReadable()) { /* handle socket2 */ }
 }
 ```
 
-### Multipart Messages
+### Message API
 
 ```java
 import io.github.ulalax.zmq.*;
 
-try (Context ctx = new Context();
-     Socket sender = new Socket(ctx, SocketType.PUSH);
-     Socket receiver = new Socket(ctx, SocketType.PULL)) {
+// Create and send message
+try (Message msg = new Message("Hello World")) {
+    socket.send(msg, SendFlags.NONE);
+}
 
-    sender.bind("tcp://*:5560");
-    receiver.connect("tcp://localhost:5560");
-    Thread.sleep(100);
-
-    // Send multipart message
-    MultipartMessage outMsg = new MultipartMessage();
-    outMsg.add("Frame 1");
-    outMsg.add("Frame 2");
-    outMsg.add("Frame 3");
-    sender.send(outMsg);
-
-    // Receive multipart message
-    MultipartMessage inMsg = receiver.recvMultipart();
-    for (String frame : inMsg.asStrings()) {
-        System.out.println("Received frame: " + frame);
-    }
+// Receive message
+try (Message reply = socket.recvMessage()) {
+    System.out.println(reply.toString());
 }
 ```
 
@@ -205,37 +154,32 @@ try (Context ctx = new Context();
 
 | Type | Description |
 |------|-------------|
-| `SocketType.REQ` | Request socket for client-side REQ-REP |
-| `SocketType.REP` | Reply socket for server-side REQ-REP |
-| `SocketType.PUB` | Publish socket for PUB-SUB |
-| `SocketType.SUB` | Subscribe socket for PUB-SUB |
-| `SocketType.PUSH` | Push socket for PUSH-PULL pipeline |
-| `SocketType.PULL` | Pull socket for PUSH-PULL pipeline |
-| `SocketType.DEALER` | Async request socket |
-| `SocketType.ROUTER` | Async reply socket with routing |
-| `SocketType.PAIR` | Exclusive pair for inter-thread communication |
-| `SocketType.XPUB` | Extended publish with subscription backflow |
+| `SocketType.REQ` | Request socket (client) |
+| `SocketType.REP` | Reply socket (server) |
+| `SocketType.PUB` | Publish socket |
+| `SocketType.SUB` | Subscribe socket |
+| `SocketType.PUSH` | Push socket (pipeline) |
+| `SocketType.PULL` | Pull socket (pipeline) |
+| `SocketType.DEALER` | Async request |
+| `SocketType.ROUTER` | Async reply |
+| `SocketType.PAIR` | Exclusive pair |
+| `SocketType.XPUB` | Extended publish |
 | `SocketType.XSUB` | Extended subscribe |
 | `SocketType.STREAM` | Raw TCP socket |
 
-## API Overview
+## API Reference
 
 ### Context
 
 ```java
-// Create context
-Context ctx = new Context();
-Context ctx = new Context(ioThreads, maxSockets);
+Context ctx = new Context();                              // Default
+Context ctx = new Context(ioThreads, maxSockets);         // Custom
 
-// Context options
 ctx.setOption(ContextOption.IO_THREADS, 4);
 int threads = ctx.getOption(ContextOption.IO_THREADS);
 
-// Get ZMQ version
-var (major, minor, patch) = Context.version();
-
-// Check capability
-boolean hasCurve = Context.has("curve");
+int[] version = Context.version();                        // Get ZMQ version
+boolean hasCurve = Context.has("curve");                  // Check capability
 ```
 
 ### Socket
@@ -249,95 +193,73 @@ socket.connect("tcp://localhost:5555");
 socket.unbind("tcp://*:5555");
 socket.disconnect("tcp://localhost:5555");
 
-// Send operations
-socket.send("Hello");                              // String
-socket.send(byteArray);                            // byte[]
-socket.send(data, SendFlags.SEND_MORE);           // With flags
-boolean sent = socket.trySend(data);              // Non-blocking
+// Send
+socket.send("Hello");
+socket.send(byteArray);
+socket.send(data, SendFlags.SEND_MORE);
+boolean sent = socket.trySend(data);
 
-// Receive operations
-String str = socket.recvString();                  // String
-byte[] data = socket.recvBytes();                  // byte[]
-String str = socket.recvString(RecvFlags.DONTWAIT); // With flags
-boolean received = socket.tryRecvString();         // Non-blocking
+// Receive
+String str = socket.recvString();
+byte[] data = socket.recvBytes();
+boolean received = socket.tryRecvString();
 
-// Socket options
+// Options
 socket.setOption(SocketOption.LINGER, 0);
-socket.setOption(SocketOption.RCVTIMEO, 5000);
 int linger = socket.getOption(SocketOption.LINGER);
-
-// Subscription (SUB socket)
-socket.subscribe("topic");
-socket.unsubscribe("topic");
 ```
 
-### Message
+## Samples
 
-```java
-// Create and send message
-try (Message msg = new Message("Hello World")) {
-    socket.send(msg, SendFlags.NONE);
-}
+The `zmq-samples` module contains 13 sample applications demonstrating all ZeroMQ patterns:
 
-// Receive message
-try (Message msg = socket.recvMessage()) {
-    System.out.println(msg.toString());
-    System.out.println("Size: " + msg.size());
-    byte[] data = msg.data();
-}
+| Sample | Pattern | Description |
+|--------|---------|-------------|
+| ReqRepSample | REQ-REP | Synchronous request-reply |
+| PubSubSample | PUB-SUB | Publish-subscribe with topic filtering |
+| PushPullSample | PUSH-PULL | Pipeline (ventilator-worker-sink) |
+| PairSample | PAIR | Exclusive 1:1 bidirectional |
+| RouterDealerSample | ROUTER-DEALER | Async broker pattern |
+| RouterToRouterSample | ROUTER-ROUTER | Peer-to-peer, hub-spoke |
+| ProxySample | XPUB-XSUB | Proxy for pub-sub forwarding |
+| SteerableProxySample | Steerable Proxy | Controllable proxy (PAUSE/RESUME) |
+| PollerSample | Polling | Multi-socket polling |
+| MonitorSample | Monitor | Socket event monitoring |
+| CurveSecuritySample | CURVE | Encrypted communication |
+| MultipartSample | Multipart | Multipart message handling |
+| RouterBenchmarkSample | Benchmark | Performance testing |
 
-// Message properties
-String routing = msg.get(MessageProperty.ROUTING_ID);
-String userId = msg.get(MessageProperty.USER_ID);
-```
+### Running Samples
 
-### CURVE Security
-
-```java
-import io.github.ulalax.zmq.*;
-
-// Generate keypair
-Curve.KeyPair serverKeys = Curve.generateKeypair();
-Curve.KeyPair clientKeys = Curve.generateKeypair();
-
-// Server
-try (Socket server = new Socket(ctx, SocketType.REP)) {
-    server.setOption(SocketOption.CURVE_SERVER, 1);
-    server.setOption(SocketOption.CURVE_SECRETKEY, serverKeys.secretKey());
-    server.bind("tcp://*:5555");
-
-    String request = server.recvString();
-    server.send("Secure reply");
-}
-
-// Client
-try (Socket client = new Socket(ctx, SocketType.REQ)) {
-    client.setOption(SocketOption.CURVE_SERVERKEY, serverKeys.publicKey());
-    client.setOption(SocketOption.CURVE_PUBLICKEY, clientKeys.publicKey());
-    client.setOption(SocketOption.CURVE_SECRETKEY, clientKeys.secretKey());
-    client.connect("tcp://localhost:5555");
-
-    client.send("Secure request");
-    String reply = client.recvString();
-}
+```bash
+# Run specific sample
+./gradlew :zmq-samples:runReqRep
+./gradlew :zmq-samples:runPubSub
+./gradlew :zmq-samples:runPushPull
+./gradlew :zmq-samples:runPair
+./gradlew :zmq-samples:runRouterDealer
+./gradlew :zmq-samples:runRouterToRouter
+./gradlew :zmq-samples:runProxy
+./gradlew :zmq-samples:runSteerableProxy
+./gradlew :zmq-samples:runPoller
+./gradlew :zmq-samples:runMonitor
+./gradlew :zmq-samples:runCurveSecurity
+./gradlew :zmq-samples:runMultipart
+./gradlew :zmq-samples:runRouterBenchmark
 ```
 
 ## Supported Platforms
 
-Native libraries are bundled for the following platforms:
-
 | OS | Architecture |
 |----|--------------|
-| Linux | x86_64, ARM64 (aarch64) |
-| macOS | x86_64, ARM64 (Apple Silicon) |
-| Windows | x86_64 |
-
-Libraries are automatically extracted and loaded at runtime - no manual installation required.
+| Windows | x64 |
+| Linux | x64, ARM64 |
+| macOS | x64, ARM64 |
 
 ## Requirements
 
-- **JDK 21** or later
-- No external native library installation required (bundled)
+- JDK 22 or later
+- Native libzmq library (automatically provided)
 
 ## Building from Source
 
@@ -368,25 +290,31 @@ jvm-zmq/
 │       ├── ZmqException.java  # Exception handling
 │       └── NativeLoader.java  # Native library loader
 │
-└── zmq/               # High-level API
-    └── src/main/java/io/github/ulalax/zmq/
-        ├── Context.java           # ZMQ context
-        ├── Socket.java            # ZMQ socket
-        ├── Message.java           # ZMQ message
-        ├── MultipartMessage.java  # Multipart message utilities
-        ├── Poller.java            # Polling utilities
-        ├── PollItem.java          # Poll item
-        ├── Curve.java             # CURVE security
-        ├── Z85.java               # Z85 encoding
-        └── Proxy.java             # Proxy utilities
+├── zmq/               # High-level API
+│   └── src/main/java/io/github/ulalax/zmq/
+│       ├── Context.java           # ZMQ context
+│       ├── Socket.java            # ZMQ socket
+│       ├── Message.java           # ZMQ message
+│       ├── MultipartMessage.java  # Multipart utilities
+│       ├── Poller.java            # Polling utilities
+│       ├── Curve.java             # CURVE security
+│       └── Proxy.java             # Proxy utilities
+│
+├── zmq-samples/       # Sample applications
+│   └── src/main/java/io/github/ulalax/zmq/samples/
+│       └── *.java                 # 13 sample programs
+│
+└── zmq-benchmark/     # JMH benchmarks
+    └── src/jmh/java/io/github/ulalax/zmq/benchmark/
+        └── *.java                 # Performance benchmarks
 ```
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) for details.
 
 ## Related Projects
 
 - [libzmq](https://github.com/zeromq/libzmq) - ZeroMQ core library
-- [libzmq-native](https://github.com/ulala-x/libzmq-native) - Pre-built native libraries for multiple platforms
+- [libzmq-native](https://github.com/ulala-x/libzmq-native) - Native binaries
 - [netzmq](https://github.com/ulala-x/netzmq) - .NET ZeroMQ bindings
