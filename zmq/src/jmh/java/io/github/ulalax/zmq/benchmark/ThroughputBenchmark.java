@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
  * Measures message processing throughput (messages/sec and MB/sec)
  * using PUSH-PULL and PUB-SUB patterns with various message sizes.
  * <p>
- * Run with: ./gradlew :zmq-benchmark:jmh
+ * Run with: ./gradlew :zmq:jmh
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)

@@ -290,23 +290,21 @@ jvm-zmq/
 │       ├── ZmqException.java  # Exception handling
 │       └── NativeLoader.java  # Native library loader
 │
-├── zmq/               # High-level API
-│   └── src/main/java/io/github/ulalax/zmq/
-│       ├── Context.java           # ZMQ context
-│       ├── Socket.java            # ZMQ socket
-│       ├── Message.java           # ZMQ message
-│       ├── MultipartMessage.java  # Multipart utilities
-│       ├── Poller.java            # Instance-based polling
-│       ├── Curve.java             # CURVE security
-│       └── Proxy.java             # Proxy utilities
+├── zmq/               # High-level API & JMH benchmarks
+│   ├── src/main/java/io/github/ulalax/zmq/
+│   │   ├── Context.java           # ZMQ context
+│   │   ├── Socket.java            # ZMQ socket
+│   │   ├── Message.java           # ZMQ message
+│   │   ├── MultipartMessage.java  # Multipart utilities
+│   │   ├── Poller.java            # Instance-based polling
+│   │   ├── Curve.java             # CURVE security
+│   │   └── Proxy.java             # Proxy utilities
+│   └── src/jmh/java/io/github/ulalax/zmq/benchmark/
+│       └── *.java                 # Performance benchmarks
 │
-├── zmq-samples/       # Sample applications
-│   └── src/main/java/io/github/ulalax/zmq/samples/
-│       └── *.java                 # 13 sample programs
-│
-└── zmq-benchmark/     # JMH benchmarks
-    └── src/jmh/java/io/github/ulalax/zmq/benchmark/
-        └── *.java                 # Performance benchmarks
+└── zmq-samples/       # Sample applications
+    └── src/main/java/io/github/ulalax/zmq/samples/
+        └── *.java                 # 13 sample programs
 ```
 
 ## License

@@ -8,5 +8,4 @@ rootProject.name = "jvm-zmq"
 
 include("zmq-core")
 include("zmq")
-include("zmq-benchmark")
 include("zmq-samples")

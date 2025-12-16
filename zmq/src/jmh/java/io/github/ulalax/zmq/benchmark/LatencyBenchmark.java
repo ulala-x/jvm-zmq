@@ -15,8 +15,8 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * JMH automatically provides statistics including: average, min, max, and percentiles.
  * <p>
- * Run with: ./gradlew :zmq-benchmark:jmh
- * For more detailed statistics: ./gradlew :zmq-benchmark:jmh -Pjmh.profilers=gc
+ * Run with: ./gradlew :zmq:jmh
+ * For more detailed statistics: ./gradlew :zmq:jmh -Pjmh.profilers=gc
  */
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
