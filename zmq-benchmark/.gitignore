@@ -1,0 +1,7 @@
+# JMH generated files
+build/
+.gradle/
+
+# Results
+*.json
+jmh-result.txt

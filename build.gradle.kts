@@ -1,100 +1,58 @@
 plugins {
     `java-library`
-    `maven-publish`
+    idea
 }
 
 allprojects {
+    apply(plugin = "idea")
+
     group = "io.github.ulalax"
-    version = "1.0.0-SNAPSHOT"
+    version = "0.1"
 
     repositories {
         mavenCentral()
     }
+
+    // IntelliJ 모듈 이름을 단순하게 설정
+    the<org.gradle.plugins.ide.idea.model.IdeaModel>().module {
+        name = project.name
+    }
 }
 
+// java-library 플러그인이 적용된 서브프로젝트 공통 설정
 subprojects {
-    apply(plugin = "java-library")
-    apply(plugin = "maven-publish")
-
-    java {
-        toolchain {
-            languageVersion.set(JavaLanguageVersion.of(22))
-        }
-        withSourcesJar()
-        withJavadocJar()
-    }
-
-    tasks.withType<JavaCompile> {
-        options.encoding = "UTF-8"
-        options.release.set(22)
-    }
-
-    tasks.withType<Test> {
-        useJUnitPlatform()
-        jvmArgs(
-            // Enable native access for FFM
-            "--enable-native-access=ALL-UNNAMED"
-        )
-    }
-
-    tasks.withType<Javadoc> {
-        options.encoding = "UTF-8"
-        (options as StandardJavadocDocletOptions).apply {
-            addStringOption("Xdoclint:none", "-quiet")
-            addStringOption("-release", "22")
-        }
-    }
-
-    dependencies {
-        testImplementation(platform("org.junit:junit-bom:5.10.1"))
-        testImplementation("org.junit.jupiter:junit-jupiter")
-        testImplementation("org.assertj:assertj-core:3.24.2")
-        testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    }
-
-    publishing {
-        publications {
-            create<MavenPublication>("maven") {
-                from(components["java"])
-                pom {
-                    name.set("${project.group}:${project.name}")
-                    description.set("ZeroMQ Java bindings using Foreign Function & Memory API")
-                    url.set("https://github.com/ulala-x/jvm-zmq")
-                    licenses {
-                        license {
-                            name.set("MIT License")
-                            url.set("https://opensource.org/licenses/MIT")
-                        }
-                    }
-                    developers {
-                        developer {
-                            id.set("ulala-x")
-                            name.set("Ulala X")
-                            email.set("ulala.x@example.com")
-                        }
-                    }
-                    scm {
-                        connection.set("scm:git:git://github.com/ulala-x/jvm-zmq.git")
-                        developerConnection.set("scm:git:ssh://github.com/ulala-x/jvm-zmq.git")
-                        url.set("https://github.com/ulala-x/jvm-zmq")
-                    }
-                }
+    plugins.withType<JavaLibraryPlugin> {
+        java {
+            toolchain {
+                languageVersion.set(JavaLanguageVersion.of(22))
             }
         }
 
-        repositories {
-            // Publish to local Maven repository
-            mavenLocal()
+        tasks.withType<JavaCompile> {
+            options.encoding = "UTF-8"
+            options.release.set(22)
+        }
 
-            // Publish to GitHub Packages
-            maven {
-                name = "GitHubPackages"
-                url = uri("https://maven.pkg.github.com/ulala-x/jvm-zmq")
-                credentials {
-                    username = System.getenv("GITHUB_ACTOR") ?: findProperty("gpr.user") as String? ?: ""
-                    password = System.getenv("GITHUB_TOKEN") ?: findProperty("gpr.token") as String? ?: ""
-                }
+        tasks.withType<Test> {
+            useJUnitPlatform()
+            jvmArgs(
+                "--enable-native-access=ALL-UNNAMED"
+            )
+        }
+
+        tasks.withType<Javadoc> {
+            options.encoding = "UTF-8"
+            (options as StandardJavadocDocletOptions).apply {
+                addStringOption("Xdoclint:none", "-quiet")
+                addStringOption("-release", "22")
             }
+        }
+
+        dependencies {
+            testImplementation(platform("org.junit:junit-bom:5.10.1"))
+            testImplementation("org.junit.jupiter:junit-jupiter")
+            testImplementation("org.assertj:assertj-core:3.24.2")
+            testRuntimeOnly("org.junit.platform:junit-platform-launcher")
         }
     }
 }
