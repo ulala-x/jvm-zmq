@@ -106,7 +106,8 @@ public class RouterDealerSample {
 
         try (Context ctx = new Context();
              Socket frontend = new Socket(ctx, SocketType.ROUTER);
-             Socket backend = new Socket(ctx, SocketType.ROUTER)) {
+             Socket backend = new Socket(ctx, SocketType.ROUTER);
+             Poller poller = new Poller()) {
 
             // Configure sockets
             frontend.setOption(SocketOption.LINGER, 0);
@@ -125,18 +126,17 @@ public class RouterDealerSample {
             Queue<ClientRequest> clientRequests = new LinkedList<>();
             Queue<byte[]> availableWorkers = new LinkedList<>();
 
-            // Setup polling
-            PollItem[] pollItems = new PollItem[2];
-            pollItems[0] = new PollItem(frontend, PollEvents.IN);
-            pollItems[1] = new PollItem(backend, PollEvents.IN);
+            // Register sockets with poller
+            int frontendIdx = poller.register(frontend, PollEvents.IN);
+            int backendIdx = poller.register(backend, PollEvents.IN);
 
             while (true) {
                 try {
                     // Poll with 100ms timeout
-                    Poller.poll(pollItems, 100);
+                    poller.poll(100);
 
                     // Check frontend (client requests)
-                    if (pollItems[0].isReadable()) {
+                    if (poller.isReadable(frontendIdx)) {
                         // Receive from client: [client-identity][empty][request]
                         byte[] clientIdentity = recvBytes(frontend);
                         byte[] empty = recvBytes(frontend);
@@ -168,7 +168,7 @@ public class RouterDealerSample {
                     }
 
                     // Check backend (worker responses)
-                    if (pollItems[1].isReadable()) {
+                    if (poller.isReadable(backendIdx)) {
                         // Receive from worker: [worker-identity][empty][client-identity][empty][reply]
                         byte[] workerIdentity = recvBytes(backend);
                         byte[] empty1 = recvBytes(backend);

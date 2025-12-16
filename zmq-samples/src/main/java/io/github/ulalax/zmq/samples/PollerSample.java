@@ -2,7 +2,6 @@ package io.github.ulalax.zmq.samples;
 
 import io.github.ulalax.zmq.Context;
 import io.github.ulalax.zmq.PollEvents;
-import io.github.ulalax.zmq.PollItem;
 import io.github.ulalax.zmq.Poller;
 import io.github.ulalax.zmq.Socket;
 import io.github.ulalax.zmq.SocketOption;
@@ -48,7 +47,8 @@ public class PollerSample {
 
         try (Context context = new Context();
              Socket receiver1 = new Socket(context, SocketType.PULL);
-             Socket receiver2 = new Socket(context, SocketType.PULL)) {
+             Socket receiver2 = new Socket(context, SocketType.PULL);
+             Poller poller = new Poller()) {
 
             // Bind receivers
             receiver1.bind(RECEIVER1_ADDRESS);
@@ -72,11 +72,9 @@ public class PollerSample {
             // Allow senders to connect
             sleep(500);
 
-            // Create poll items
-            PollItem[] pollItems = {
-                    new PollItem(receiver1, PollEvents.IN),
-                    new PollItem(receiver2, PollEvents.IN)
-            };
+            // Register sockets with poller
+            int idx1 = poller.register(receiver1, PollEvents.IN);
+            int idx2 = poller.register(receiver2, PollEvents.IN);
 
             System.out.println("[Main] Starting to poll both receivers...");
             System.out.println();
@@ -85,7 +83,7 @@ public class PollerSample {
 
             while (totalMessages < MAX_MESSAGES) {
                 // Poll with 1 second timeout
-                int ready = Poller.poll(pollItems, 1000);
+                int ready = poller.poll(1000);
 
                 if (ready == 0) {
                     System.out.println("[Main] Poll timeout - no messages");
@@ -93,14 +91,14 @@ public class PollerSample {
                 }
 
                 // Check receiver 1
-                if (pollItems[0].isReadable()) {
+                if (poller.isReadable(idx1)) {
                     String msg = receiver1.recvString();
                     System.out.println("[Receiver-1] " + msg);
                     totalMessages++;
                 }
 
                 // Check receiver 2
-                if (pollItems[1].isReadable()) {
+                if (poller.isReadable(idx2)) {
                     String msg = receiver2.recvString();
                     System.out.println("[Receiver-2] " + msg);
                     totalMessages++;

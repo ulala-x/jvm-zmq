@@ -123,14 +123,14 @@ try (Context ctx = new Context();
 ```java
 import io.github.ulalax.zmq.*;
 
-PollItem[] items = new PollItem[] {
-    new PollItem(socket1, PollEvents.IN),
-    new PollItem(socket2, PollEvents.IN)
-};
+try (Poller poller = new Poller()) {
+    int idx1 = poller.register(socket1, PollEvents.IN);
+    int idx2 = poller.register(socket2, PollEvents.IN);
 
-if (Poller.poll(items, 1000) > 0) {
-    if (items[0].isReadable()) { /* handle socket1 */ }
-    if (items[1].isReadable()) { /* handle socket2 */ }
+    if (poller.poll(1000) > 0) {
+        if (poller.isReadable(idx1)) { /* handle socket1 */ }
+        if (poller.isReadable(idx2)) { /* handle socket2 */ }
+    }
 }
 ```
 
@@ -296,7 +296,7 @@ jvm-zmq/
 │       ├── Socket.java            # ZMQ socket
 │       ├── Message.java           # ZMQ message
 │       ├── MultipartMessage.java  # Multipart utilities
-│       ├── Poller.java            # Polling utilities
+│       ├── Poller.java            # Instance-based polling
 │       ├── Curve.java             # CURVE security
 │       └── Proxy.java             # Proxy utilities
 │
