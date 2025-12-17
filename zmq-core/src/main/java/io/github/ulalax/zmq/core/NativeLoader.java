@@ -13,8 +13,8 @@ import java.nio.file.*;
  *
  * <h2>Supported Platforms:</h2>
  * <ul>
- *   <li>Windows (x86_64, aarch64)</li>
- *   <li>Linux (x86_64, aarch64)</li>
+ *   <li>Windows (x86_64, aarch64/ARM64)</li>
+ *   <li>Linux (x86_64, aarch64/ARM64)</li>
  *   <li>macOS (x86_64, aarch64/Apple Silicon)</li>
  * </ul>
  *

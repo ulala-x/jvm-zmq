@@ -56,7 +56,7 @@
  * <ul>
  *   <li>Linux (x86_64, aarch64) - libzmq.so</li>
  *   <li>macOS (x86_64, aarch64) - libzmq.dylib</li>
- *   <li>Windows (x86_64) - libzmq.dll</li>
+ *   <li>Windows (x86_64, aarch64) - libzmq.dll</li>
  * </ul>
  *
  * <h2>Error Handling</h2>

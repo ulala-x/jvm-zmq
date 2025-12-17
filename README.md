@@ -308,7 +308,7 @@ The `zmq-samples` module contains 13 sample applications demonstrating all ZeroM
 
 | OS | Architecture |
 |----|--------------|
-| Windows | x64 |
+| Windows | x64, ARM64 |
 | Linux | x64, ARM64 |
 | macOS | x64, ARM64 |
 
