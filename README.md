@@ -3,6 +3,7 @@
 [![Build and Test](https://github.com/ulala-x/jvm-zmq/actions/workflows/build.yml/badge.svg)](https://github.com/ulala-x/jvm-zmq/actions/workflows/build.yml)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.ulalax/zmq.svg)](https://search.maven.org/artifact/io.github.ulalax/zmq)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![API Documentation](https://img.shields.io/badge/API-Documentation-blue)](https://ulala-x.github.io/jvm-zmq/)
 
 A modern Java binding for ZeroMQ (libzmq) using JDK 22+ FFM (Foreign Function & Memory) API.
 
@@ -364,6 +365,7 @@ jvm-zmq/
 
 ## Documentation
 
+- [API Documentation](https://ulala-x.github.io/jvm-zmq/) - Complete Javadoc API reference
 - [Performance Benchmarks](docs/BENCHMARKS.md) - Detailed benchmark results, performance analysis, and optimization guidelines
 
 ## License
