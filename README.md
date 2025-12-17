@@ -203,6 +203,8 @@ Three receive strategies compared for event-driven applications:
 
 Results are saved to `zmq/build/reports/jmh/results-formatted.txt`
 
+For detailed benchmark results, performance analysis, and implementation patterns, see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+
 ## Socket Types
 
 | Type | Description |
@@ -359,6 +361,10 @@ jvm-zmq/
     └── src/main/java/io/github/ulalax/zmq/samples/
         └── *.java                 # 13 sample programs
 ```
+
+## Documentation
+
+- [Performance Benchmarks](docs/BENCHMARKS.md) - Detailed benchmark results, performance analysis, and optimization guidelines
 
 ## License
 
