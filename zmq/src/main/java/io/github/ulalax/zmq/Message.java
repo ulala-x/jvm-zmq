@@ -156,7 +156,7 @@ public final class Message implements AutoCloseable {
      * @throws IllegalArgumentException if size is negative or exceeds data size
      * @throws RuntimeException if ZMQ message initialization fails
      *
-     * @example Zero-copy with Arena cleanup:
+     * <p>Example - Zero-copy with Arena cleanup:</p>
      * <pre>{@code
      * Arena dataArena = Arena.ofShared(); // Must be shared for cross-thread close
      * MemorySegment dataSeg = dataArena.allocate(1024);

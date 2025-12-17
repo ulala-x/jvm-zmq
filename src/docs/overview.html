@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>jvm-zmq API Overview</title>
+</head>
+<body>
+<h1>jvm-zmq - Modern ZeroMQ Bindings for Java</h1>
+
+<p>
+    <strong>jvm-zmq</strong> is a modern, high-performance ZeroMQ binding for Java 22+ using the
+    Foreign Function &amp; Memory (FFM) API. It provides a clean, type-safe interface to ZeroMQ
+    messaging with zero-copy semantics and automatic resource management.
+</p>
+
+<h2>Features</h2>
+<ul>
+    <li><strong>Modern Java API</strong> - Leverages Java 22+ FFM for direct native access</li>
+    <li><strong>Zero-Copy Performance</strong> - Efficient message handling without heap allocations</li>
+    <li><strong>Type-Safe</strong> - Compile-time checking for socket types, options, and flags</li>
+    <li><strong>Resource Management</strong> - Automatic cleanup with try-with-resources</li>
+    <li><strong>Full ZeroMQ Support</strong> - All socket types, patterns, and security features</li>
+    <li><strong>High Performance</strong> - Millions of messages per second throughput</li>
+</ul>
+
+<h2>Architecture</h2>
+
+<h3>Module Structure</h3>
+<dl>
+    <dt><strong>zmq</strong> - High-Level API</dt>
+    <dd>
+        User-friendly API following Java conventions. This is the recommended package for most applications.
+        Includes socket types, message handling, polling, and security features.
+    </dd>
+
+    <dt><strong>zmq-core</strong> - Low-Level FFM Bindings</dt>
+    <dd>
+        Direct bindings to native libzmq using Java FFM API. Provides low-level access for
+        advanced use cases requiring maximum control and performance.
+    </dd>
+</dl>
+
+<h3>Key Design Principles</h3>
+<ol>
+    <li><strong>Zero-Copy</strong> - Messages use native memory segments to avoid heap allocations</li>
+    <li><strong>Type Safety</strong> - Enums and type parameters prevent common errors</li>
+    <li><strong>Resource Safety</strong> - AutoCloseable resources prevent leaks</li>
+    <li><strong>Performance</strong> - Direct FFM bindings eliminate JNI overhead</li>
+    <li><strong>Simplicity</strong> - Clean API that follows Java conventions</li>
+</ol>
+
+<h2>Quick Start</h2>
+
+<h3>Prerequisites</h3>
+<ul>
+    <li>Java 22 or later</li>
+    <li>libzmq installed on your system (or bundled in the JAR)</li>
+    <li>JVM flag: <code>--enable-native-access=ALL-UNNAMED</code></li>
+</ul>
+
+<h3>Basic Request-Reply Pattern</h3>
+<pre>
+// Server
+try (Context ctx = new Context();
+     Socket socket = new Socket(ctx, SocketType.REP)) {
+    socket.bind("tcp://*:5555");
+    while (true) {
+        String request = socket.recvString();
+        System.out.println("Received: " + request);
+        socket.send("World");
+    }
+}
+
+// Client
+try (Context ctx = new Context();
+     Socket socket = new Socket(ctx, SocketType.REQ)) {
+    socket.connect("tcp://localhost:5555");
+    socket.send("Hello");
+    String reply = socket.recvString();
+    System.out.println("Received: " + reply);
+}
+</pre>
+
+<h3>Publish-Subscribe Pattern</h3>
+<pre>
+// Publisher
+try (Context ctx = new Context();
+     Socket socket = new Socket(ctx, SocketType.PUB)) {
+    socket.bind("tcp://*:5556");
+    while (true) {
+        socket.send("temperature 25.5");
+        Thread.sleep(1000);
+    }
+}
+
+// Subscriber
+try (Context ctx = new Context();
+     Socket socket = new Socket(ctx, SocketType.SUB)) {
+    socket.connect("tcp://localhost:5556");
+    socket.subscribe("temperature");
+    while (true) {
+        String msg = socket.recvString();
+        System.out.println("Received: " + msg);
+    }
+}
+</pre>
+
+<h2>Common Patterns</h2>
+
+<h3>Socket Types and Patterns</h3>
+<table border="1" cellpadding="5" cellspacing="0">
+    <tr>
+        <th>Pattern</th>
+        <th>Socket Types</th>
+        <th>Use Case</th>
+    </tr>
+    <tr>
+        <td>Request-Reply</td>
+        <td>REQ, REP, DEALER, ROUTER</td>
+        <td>Client-server, RPC, load balancing</td>
+    </tr>
+    <tr>
+        <td>Publish-Subscribe</td>
+        <td>PUB, SUB, XPUB, XSUB</td>
+        <td>Event distribution, monitoring, notifications</td>
+    </tr>
+    <tr>
+        <td>Pipeline</td>
+        <td>PUSH, PULL</td>
+        <td>Task distribution, parallel processing</td>
+    </tr>
+    <tr>
+        <td>Exclusive Pair</td>
+        <td>PAIR</td>
+        <td>Thread coordination, testing</td>
+    </tr>
+</table>
+
+<h3>Zero-Copy Message Handling</h3>
+<pre>
+try (Context ctx = new Context();
+     Socket socket = new Socket(ctx, SocketType.REP);
+     Message msg = Message.create()) {
+
+    socket.bind("tcp://*:5555");
+
+    while (true) {
+        // Zero-copy receive
+        socket.recv(msg);
+
+        // Process message data
+        byte[] data = msg.data();
+        System.out.println("Received " + data.length + " bytes");
+
+        // Reuse message for reply (zero-copy)
+        msg.rebuild(data);
+        socket.send(msg);
+    }
+}
+</pre>
+
+<h3>Polling Multiple Sockets</h3>
+<pre>
+try (Context ctx = new Context();
+     Socket frontend = new Socket(ctx, SocketType.ROUTER);
+     Socket backend = new Socket(ctx, SocketType.DEALER);
+     Poller poller = new Poller(ctx, 2)) {
+
+    frontend.bind("tcp://*:5555");
+    backend.bind("tcp://*:5556");
+
+    poller.register(frontend, PollEvents.POLLIN);
+    poller.register(backend, PollEvents.POLLIN);
+
+    while (true) {
+        int events = poller.poll(1000);
+        if (events > 0) {
+            if (poller.pollin(0)) {
+                // Handle frontend message
+                MultipartMessage msg = frontend.recvMultipart();
+                backend.sendMultipart(msg);
+            }
+            if (poller.pollin(1)) {
+                // Handle backend message
+                MultipartMessage msg = backend.recvMultipart();
+                frontend.sendMultipart(msg);
+            }
+        }
+    }
+}
+</pre>
+
+<h2>Security</h2>
+
+<h3>Curve Encryption</h3>
+<pre>
+// Generate key pair
+String[] serverKeys = Curve.keyPair();
+String[] clientKeys = Curve.keyPair();
+
+// Server setup
+try (Socket server = new Socket(ctx, SocketType.REP)) {
+    server.setOption(SocketOption.CURVE_SERVER, 1);
+    server.setOption(SocketOption.CURVE_SECRETKEY, serverKeys[1]);
+    server.bind("tcp://*:5555");
+}
+
+// Client setup
+try (Socket client = new Socket(ctx, SocketType.REQ)) {
+    client.setOption(SocketOption.CURVE_SERVERKEY, serverKeys[0]);
+    client.setOption(SocketOption.CURVE_PUBLICKEY, clientKeys[0]);
+    client.setOption(SocketOption.CURVE_SECRETKEY, clientKeys[1]);
+    client.connect("tcp://localhost:5555");
+}
+</pre>
+
+<h2>Performance Tuning</h2>
+
+<h3>High Water Mark (HWM)</h3>
+<p>Configure message queue limits to prevent memory exhaustion:</p>
+<pre>
+socket.setOption(SocketOption.SNDHWM, 10000);
+socket.setOption(SocketOption.RCVHWM, 10000);
+</pre>
+
+<h3>I/O Thread Configuration</h3>
+<p>Adjust I/O threads based on workload:</p>
+<pre>
+Context ctx = new Context(4, 1024); // 4 I/O threads, 1024 max sockets
+</pre>
+
+<h3>Message Batching</h3>
+<p>Use multipart messages to reduce system calls:</p>
+<pre>
+MultipartMessage msg = new MultipartMessage();
+msg.add("header".getBytes());
+msg.add("body".getBytes());
+socket.sendMultipart(msg);
+</pre>
+
+<h2>Best Practices</h2>
+
+<h3>Resource Management</h3>
+<ul>
+    <li>Always use try-with-resources for Context, Socket, and Message</li>
+    <li>Close resources in reverse order of creation</li>
+    <li>Don't share sockets between threads</li>
+    <li>Terminate contexts cleanly to avoid hanging threads</li>
+</ul>
+
+<h3>Error Handling</h3>
+<ul>
+    <li>Handle ZmqException for all operations that can fail</li>
+    <li>Check for EAGAIN in non-blocking mode</li>
+    <li>Handle EINTR (interrupted system call) appropriately</li>
+    <li>Use timeouts to prevent indefinite blocking</li>
+</ul>
+
+<h3>Thread Safety</h3>
+<ul>
+    <li>Context is thread-safe and can be shared</li>
+    <li>Sockets are NOT thread-safe (one socket per thread)</li>
+    <li>Use PAIR sockets for inter-thread communication</li>
+    <li>Consider using inproc:// transport for same-process communication</li>
+</ul>
+
+<h2>Additional Resources</h2>
+<ul>
+    <li><a href="https://github.com/ulala-x/jvm-zmq">GitHub Repository</a></li>
+    <li><a href="https://zeromq.org/documentation/">ZeroMQ Documentation</a></li>
+    <li><a href="https://zguide.zeromq.org/">The ZeroMQ Guide</a></li>
+    <li><a href="https://docs.oracle.com/en/java/javase/22/core/foreign-function-and-memory-api.html">Java FFM API</a></li>
+</ul>
+
+<h2>License</h2>
+<p>jvm-zmq is licensed under the MIT License. See LICENSE file for details.</p>
+
+<p>
+    <em>For detailed API documentation, please refer to the package and class documentation below.</em>
+</p>
+</body>
+</html>
