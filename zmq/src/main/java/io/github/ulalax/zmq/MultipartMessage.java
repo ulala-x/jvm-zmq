@@ -93,16 +93,46 @@ public final class MultipartMessage implements Iterable<byte[]> {
     }
 
     /**
-     * Receives all frames from a socket.
+     * Receives all frames from a socket (blocking).
+     * <p>
+     * This method receives a complete multipart message with blocking semantics.
+     * It will block until the first frame is available, then continues receiving
+     * all remaining frames to maintain atomicity.
+     * <p>
+     * <b>Error Recovery:</b> If an error occurs while receiving subsequent frames,
+     * a {@link io.github.ulalax.zmq.core.ZmqException} will be thrown with detailed
+     * context including the number of frames successfully received. The partial
+     * message is discarded to prevent processing incomplete data. <b>Critical:</b>
+     * The socket's internal state may be corrupted after such an error and the
+     * socket should be closed and recreated for reliable operation.
+     *
      * @param socket The socket to receive from
-     * @return The multipart message
+     * @return The complete multipart message
+     * @throws io.github.ulalax.zmq.core.ZmqException if receive fails, with detailed
+     *         context about which frame failed if the error occurred during subsequent
+     *         frame reception
      */
     public static MultipartMessage recv(Socket socket) {
         MultipartMessage msg = new MultipartMessage();
-        do {
-            byte[] frame = socket.recvBytes();
-            msg.add(frame);
-        } while (socket.hasMore());
+        int framesReceived = 0;
+
+        try {
+            do {
+                byte[] frame = socket.recvBytes();
+                msg.add(frame);
+                framesReceived++;
+            } while (socket.hasMore());
+        } catch (io.github.ulalax.zmq.core.ZmqException e) {
+            // If error occurs after receiving some frames, provide better context
+            if (framesReceived > 0) {
+                throw new io.github.ulalax.zmq.core.ZmqException(e.getErrorNumber(),
+                        "Failed to receive complete multipart message: " +
+                        "received " + framesReceived + " frame(s) before error. " +
+                        "Socket state may be corrupted and should be closed.");
+            }
+            // First frame error - just rethrow as-is
+            throw e;
+        }
         return msg;
     }
 

@@ -28,4 +28,19 @@ public enum RecvFlags {
     public int getValue() {
         return value;
     }
+
+    /**
+     * Creates a RecvFlags from a native value.
+     * @param value The native value
+     * @return RecvFlags instance
+     */
+    public static RecvFlags fromValue(int value) {
+        for (RecvFlags flag : values()) {
+            if (flag.value == value) {
+                return flag;
+            }
+        }
+        // For combined flags, return NONE as placeholder
+        return NONE;
+    }
 }

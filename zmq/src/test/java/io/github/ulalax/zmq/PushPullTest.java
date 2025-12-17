@@ -396,7 +396,7 @@ class PushPullTest {
                 long startTime = System.currentTimeMillis();
 
                 // Using trySend which handles EAGAIN gracefully
-                boolean sent = pusher.trySend("data");
+                boolean sent = pusher.trySend("data", SendFlags.NONE);
 
                 long elapsedTime = System.currentTimeMillis() - startTime;
 

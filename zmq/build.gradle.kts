@@ -12,6 +12,9 @@ dependencies {
     // JMH dependencies
     jmhImplementation("org.openjdk.jmh:jmh-core:1.37")
     jmhAnnotationProcessor("org.openjdk.jmh:jmh-generator-annprocess:1.37")
+
+    // Netty for PooledByteBufAllocator (benchmark only)
+    jmhImplementation("io.netty:netty-buffer:4.1.100.Final")
 }
 
 tasks.jar {
@@ -46,6 +49,9 @@ jmh {
 
     // JVM arguments for FFM native access
     jvmArgs.add("--enable-native-access=ALL-UNNAMED")
+
+    // Enable GC profiling
+    profilers.add("gc")
 }
 
 // Format JMH benchmark results in human-readable format

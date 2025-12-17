@@ -509,7 +509,7 @@ class CoreTypesTest {
 
                 // When: Try to receive with timeout
                 byte[] buffer = new byte[256];
-                int result = socket.tryRecv(buffer);
+                int result = socket.tryRecv(buffer, RecvFlags.NONE);
 
                 // Then: Should return -1 for timeout/error
                 assertThat(result)

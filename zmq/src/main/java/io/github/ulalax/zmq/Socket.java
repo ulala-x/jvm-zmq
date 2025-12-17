@@ -39,10 +39,30 @@ public final class Socket implements AutoCloseable {
 
     // I/O Arena for send/recv operations to avoid repeated Arena allocations
     private final Arena ioArena;
+    /**
+     * Dynamic send buffer that grows as needed and periodically resets
+     * to prevent excessive memory usage from occasional large messages.
+     */
     private MemorySegment sendBuffer;
-    private MemorySegment recvBuffer;
     private int sendBufferSize = 8192; // Default 8KB
+    /**
+     * Dynamic receive buffer that grows as needed and periodically resets
+     * to prevent excessive memory usage from occasional large messages.
+     */
+    private MemorySegment recvBuffer;
     private int recvBufferSize = 8192; // Default 8KB
+
+    // Buffer usage tracking for adaptive sizing
+    private static final int BUFFER_RESET_THRESHOLD_MULTIPLIER = 4;  // Reset if 4x larger than needed
+    private static final int BUFFER_USAGE_SAMPLE_SIZE = 100;  // Track last 100 operations
+    private int sendBufferUsageCount = 0;
+    private long sendBufferTotalUsed = 0;
+    private int recvBufferUsageCount = 0;
+    private long recvBufferTotalUsed = 0;
+
+    // Reusable Message objects to avoid allocations on EAGAIN
+    private Message recvMessage;       // Reusable for tryRecvBytes()
+    private Message recvStringMessage;  // Reusable for tryRecvString()
 
     /**
      * Creates a new ZMQ socket.
@@ -61,9 +81,14 @@ public final class Socket implements AutoCloseable {
         this.cleanable = CLEANER.register(this, new SocketCleanup(handle));
 
         // Initialize I/O Arena and buffers for send/recv operations
-        this.ioArena = Arena.ofConfined();
+        // Use ofShared() to allow access from multiple threads
+        this.ioArena = Arena.ofShared();
         this.sendBuffer = ioArena.allocate(sendBufferSize);
         this.recvBuffer = ioArena.allocate(recvBufferSize);
+
+        // Initialize reusable Message objects
+        this.recvMessage = new Message();
+        this.recvStringMessage = new Message();
     }
 
     /**
@@ -71,7 +96,7 @@ public final class Socket implements AutoCloseable {
      * @return Memory segment representing zmq socket
      * @throws IllegalStateException if socket is closed
      */
-    MemorySegment getHandle() {
+    public MemorySegment getHandle() {
         if (closed) {
             throw new IllegalStateException("Socket is closed");
         }
@@ -257,31 +282,140 @@ public final class Socket implements AutoCloseable {
     }
 
     /**
-     * Tries to send data without blocking.
-     * @param data The data to send
-     * @return true if sent, false if would block
-     * @throws ZmqException if send fails with error other than EAGAIN
+     * Attempts to send a byte array message on the socket without blocking.
+     * <p>
+     * This method automatically sets the {@link SendFlags#DONT_WAIT} flag to ensure
+     * non-blocking behavior. If the message cannot be sent immediately (EAGAIN),
+     * the method returns {@code false} instead of throwing an exception.
+     * <p>
+     * <b>Thread-Safety:</b> This method is NOT thread-safe. Concurrent calls on the
+     * same socket from multiple threads will result in undefined behavior. The socket
+     * must not be closed while this method is executing.
+     * <p>
+     * <b>errno Behavior:</b> When the underlying ZMQ socket would block (EAGAIN), this
+     * method returns {@code false} as a normal control flow. All other errors (e.g.,
+     * ETERM, ENOTSOCK, EINTR) are thrown as {@link ZmqException}.
+     *
+     * @param data the message data to send (must not be null)
+     * @param flags additional send flags (e.g., {@link SendFlags#SEND_MORE} for multipart messages).
+     *              {@link SendFlags#DONT_WAIT} is automatically added.
+     * @return {@code true} if the message was queued successfully,
+     *         {@code false} if the operation would block (EAGAIN)
+     * @throws NullPointerException if {@code data} or {@code flags} is null
+     * @throws IllegalStateException if the socket is closed
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     *
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * Socket socket = new Socket(ctx, SocketType.DEALER);
+     * byte[] data = "Hello".getBytes(StandardCharsets.UTF_8);
+     *
+     * // Simple send
+     * if (socket.trySend(data, SendFlags.NONE)) {
+     *     System.out.println("Message sent");
+     * } else {
+     *     System.out.println("Would block - try again later");
+     * }
+     *
+     * // Multipart send
+     * socket.trySend(part1, SendFlags.SEND_MORE);
+     * socket.trySend(part2, SendFlags.NONE);
+     * }</pre>
+     *
+     * @see #send(byte[], SendFlags)
+     * @see SendFlags#DONT_WAIT
+     * @see SendFlags#SEND_MORE
      */
-    public boolean trySend(byte[] data) {
-        try {
-            send(data, SendFlags.DONT_WAIT);
-            return true;
-        } catch (ZmqException e) {
-            if (e.isAgain()) {
-                return false;
-            }
-            throw e;
+    public boolean trySend(byte[] data, SendFlags flags) {
+        if (closed) {
+            throw new IllegalStateException("Socket is closed");
         }
+        if (data == null) {
+            throw new NullPointerException("data cannot be null");
+        }
+
+        // Combine with non-blocking flag (don't use fromValue as it can't handle combined flags)
+        int combinedFlags = flags.getValue() | SendFlags.DONT_WAIT.getValue();
+
+        // Expand buffer if needed
+        if (data.length > sendBufferSize) {
+            sendBuffer = ioArena.allocate(data.length);
+            sendBufferSize = data.length;
+        }
+        MemorySegment.copy(data, 0, sendBuffer, ValueLayout.JAVA_BYTE, 0, data.length);
+
+        // Direct LibZmq call with combined flags
+        int result = LibZmq.send(getHandle(), sendBuffer, data.length, combinedFlags);
+        if (result == -1) {
+            int errno = LibZmq.errno();  // Immediately after error check
+            if (errno == ZmqConstants.EAGAIN) {
+                return false;  // Would block - normal control flow
+            }
+            ZmqException.throwIfError(-1);  // Real error - throw
+        }
+
+        // Track buffer usage for adaptive sizing
+        sendBufferTotalUsed += data.length;
+        sendBufferUsageCount++;
+
+        if (sendBufferUsageCount >= BUFFER_USAGE_SAMPLE_SIZE) {
+            long avgUsed = sendBufferTotalUsed / sendBufferUsageCount;
+            if (shouldResetBuffer(sendBufferSize, avgUsed)) {
+                // Reset to reasonable size (2x average + 1KB padding)
+                int newSize = (int) (avgUsed * 2) + 1024;
+                sendBuffer = ioArena.allocate(newSize);
+                sendBufferSize = newSize;
+            }
+            // Reset counters
+            sendBufferUsageCount = 0;
+            sendBufferTotalUsed = 0;
+        }
+
+        return true;
     }
 
     /**
-     * Tries to send a string without blocking.
-     * @param text The text to send
-     * @return true if sent, false if would block
+     * Attempts to send a UTF-8 encoded string message on the socket without blocking.
+     * <p>
+     * This is a convenience method that encodes the string to UTF-8 and calls
+     * {@link #trySend(byte[], SendFlags)}. The same non-blocking semantics apply.
+     * <p>
+     * <b>Thread-Safety:</b> This method is NOT thread-safe. Concurrent calls on the
+     * same socket from multiple threads will result in undefined behavior. The socket
+     * must not be closed while this method is executing.
+     *
+     * @param text the message text to send (must not be null)
+     * @param flags additional send flags (e.g., {@link SendFlags#SEND_MORE} for multipart messages).
+     *              {@link SendFlags#DONT_WAIT} is automatically added.
+     * @return {@code true} if the message was queued successfully,
+     *         {@code false} if the operation would block (EAGAIN)
+     * @throws NullPointerException if {@code text} or {@code flags} is null
+     * @throws IllegalStateException if the socket is closed
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     *
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * Socket socket = new Socket(ctx, SocketType.DEALER);
+     *
+     * if (socket.trySend("Hello, World!", SendFlags.NONE)) {
+     *     System.out.println("Message sent");
+     * } else {
+     *     System.out.println("Would block - try again later");
+     * }
+     * }</pre>
+     *
+     * @see #trySend(byte[], SendFlags)
+     * @see #send(String, SendFlags)
      */
-    public boolean trySend(String text) {
+    public boolean trySend(String text, SendFlags flags) {
+        if (closed) {
+            throw new IllegalStateException("Socket is closed");
+        }
+        if (text == null) {
+            throw new NullPointerException("text cannot be null");
+        }
         byte[] data = text.getBytes(StandardCharsets.UTF_8);
-        return trySend(data);
+        return trySend(data, flags);
     }
 
     // ========== Receive Methods ==========
@@ -369,49 +503,329 @@ public final class Socket implements AutoCloseable {
     }
 
     /**
-     * Tries to receive data without blocking.
-     * @param buffer The buffer to receive into
-     * @return Number of bytes received, or -1 if would block
+     * Attempts to receive a message into a byte array buffer without blocking.
+     * <p>
+     * This method automatically sets the {@link RecvFlags#DONT_WAIT} flag to ensure
+     * non-blocking behavior. If no message is available (EAGAIN), the method returns
+     * {@code -1} instead of throwing an exception.
+     * <p>
+     * <b>Thread-Safety:</b> This method is NOT thread-safe. Concurrent calls on the
+     * same socket from multiple threads will result in undefined behavior. The socket
+     * must not be closed while this method is executing.
+     * <p>
+     * <b>errno Behavior:</b> When no message is available (EAGAIN), this method returns
+     * {@code -1} as a normal control flow. All other errors (e.g., ETERM, ENOTSOCK,
+     * EINTR) are thrown as {@link ZmqException}.
+     * <p>
+     * <b>Buffer Sizing:</b> If the received message is larger than the buffer, the message
+     * will be truncated. Consider using {@link #tryRecvBytes(RecvFlags)} for automatic sizing.
+     *
+     * @param buffer the buffer to receive the message into (must not be null)
+     * @param flags additional receive flags. {@link RecvFlags#DONT_WAIT} is automatically added.
+     * @return the number of bytes received (may exceed buffer size if truncated),
+     *         or {@code -1} if no message is available (EAGAIN)
+     * @throws NullPointerException if {@code buffer} or {@code flags} is null
+     * @throws IllegalStateException if the socket is closed
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     *
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * Socket socket = new Socket(ctx, SocketType.DEALER);
+     * byte[] buffer = new byte[256];
+     *
+     * int size = socket.tryRecv(buffer, RecvFlags.NONE);
+     * if (size >= 0) {
+     *     System.out.println("Received " + size + " bytes");
+     *     if (size > buffer.length) {
+     *         System.out.println("Warning: message was truncated");
+     *     }
+     * } else {
+     *     System.out.println("No message available");
+     * }
+     * }</pre>
+     *
+     * @see #recv(byte[], RecvFlags)
+     * @see #tryRecvBytes(RecvFlags)
+     * @see RecvFlags#DONT_WAIT
      */
-    public int tryRecv(byte[] buffer) {
-        try {
-            return recv(buffer, RecvFlags.DONT_WAIT);
-        } catch (ZmqException e) {
-            if (e.isAgain()) {
-                return -1;
-            }
-            throw e;
+    public int tryRecv(byte[] buffer, RecvFlags flags) {
+        if (closed) {
+            throw new IllegalStateException("Socket is closed");
         }
+        if (buffer == null) {
+            throw new NullPointerException("buffer cannot be null");
+        }
+
+        // Combine with non-blocking flag (don't use fromValue as it can't handle combined flags)
+        int combinedFlags = flags.getValue() | RecvFlags.DONT_WAIT.getValue();
+
+        // Expand buffer if needed
+        if (buffer.length > recvBufferSize) {
+            recvBuffer = ioArena.allocate(buffer.length);
+            recvBufferSize = buffer.length;
+        }
+
+        // Direct LibZmq call
+        int result = LibZmq.recv(getHandle(), recvBuffer, buffer.length, combinedFlags);
+        if (result == -1) {
+            int errno = LibZmq.errno();  // Immediately after error check
+            if (errno == ZmqConstants.EAGAIN) {
+                return -1;  // Would block - normal control flow
+            }
+            ZmqException.throwIfError(-1);  // Real error - throw
+        }
+        MemorySegment.copy(recvBuffer, ValueLayout.JAVA_BYTE, 0, buffer, 0, result);
+
+        // Track buffer usage for adaptive sizing
+        recvBufferTotalUsed += result;
+        recvBufferUsageCount++;
+
+        if (recvBufferUsageCount >= BUFFER_USAGE_SAMPLE_SIZE) {
+            long avgUsed = recvBufferTotalUsed / recvBufferUsageCount;
+            if (shouldResetBuffer(recvBufferSize, avgUsed)) {
+                // Reset to reasonable size (2x average + 1KB padding)
+                int newSize = (int) (avgUsed * 2) + 1024;
+                recvBuffer = ioArena.allocate(newSize);
+                recvBufferSize = newSize;
+            }
+            // Reset counters
+            recvBufferUsageCount = 0;
+            recvBufferTotalUsed = 0;
+        }
+
+        return result;
     }
 
     /**
-     * Tries to receive a string without blocking.
-     * @return Received string, or null if would block
+     * Attempts to receive a UTF-8 encoded string message without blocking.
+     * <p>
+     * This method reuses an internal {@link Message} object to receive the data,
+     * then converts it to a UTF-8 string. If no message is available (EAGAIN), the
+     * method returns {@code null} instead of throwing an exception.
+     * <p>
+     * <b>Performance Note:</b> This method reuses an internal {@link Message} object
+     * to avoid memory allocation when {@code EAGAIN} occurs. This optimization makes
+     * the method significantly faster in high-frequency polling scenarios.
+     * <p>
+     * <b>Thread-Safety:</b> This method is NOT thread-safe. Concurrent calls on the
+     * same socket from multiple threads will result in undefined behavior. The socket
+     * must not be closed while this method is executing.
+     *
+     * @param flags additional receive flags. {@link RecvFlags#DONT_WAIT} is automatically added.
+     * @return the received message as a UTF-8 string, or {@code null} if no message is available (EAGAIN)
+     * @throws IllegalStateException if the socket is closed
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     *
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * Socket socket = new Socket(ctx, SocketType.DEALER);
+     *
+     * String msg = socket.tryRecvString(RecvFlags.NONE);
+     * if (msg != null) {
+     *     System.out.println("Received: " + msg);
+     * } else {
+     *     System.out.println("No message available");
+     * }
+     *
+     * // Event loop pattern
+     * while (running) {
+     *     String message = socket.tryRecvString(RecvFlags.NONE);
+     *     if (message != null) {
+     *         processMessage(message);
+     *     } else {
+     *         // Do other work or sleep briefly
+     *         Thread.sleep(10);
+     *     }
+     * }
+     * }</pre>
+     *
+     * @see #recvString(RecvFlags)
+     * @see #tryRecv(byte[], RecvFlags)
      */
-    public String tryRecvString() {
-        try {
-            return recvString(RecvFlags.DONT_WAIT);
-        } catch (ZmqException e) {
-            if (e.isAgain()) {
-                return null;
-            }
-            throw e;
+    public String tryRecvString(RecvFlags flags) {
+        if (closed) {
+            throw new IllegalStateException("Socket is closed");
         }
+
+        int combinedFlags = flags.getValue() | RecvFlags.DONT_WAIT.getValue();
+
+        // Reuse message object to avoid allocation on EAGAIN
+        recvStringMessage.rebuild();
+        int result = LibZmq.msgRecv(recvStringMessage.msgSegment, getHandle(), combinedFlags);
+        if (result == -1) {
+            int errno = LibZmq.errno();
+            if (errno == ZmqConstants.EAGAIN) {
+                return null;  // Would block - no allocation occurred
+            }
+            ZmqException.throwIfError(-1);
+        }
+        return recvStringMessage.toString();
     }
 
     /**
-     * Tries to receive data as a byte array without blocking.
-     * @return Received data, or null if would block
+     * Attempts to receive a message as a byte array without blocking.
+     * <p>
+     * This method reuses an internal {@link Message} object to receive the data,
+     * then copies it to a new byte array. If no message is available (EAGAIN), the
+     * method returns {@code null} instead of throwing an exception.
+     * <p>
+     * <b>Performance Note:</b> This method reuses an internal {@link Message} object
+     * to avoid memory allocation when {@code EAGAIN} occurs. This optimization makes
+     * the method significantly faster in high-frequency polling scenarios.
+     * <p>
+     * <b>Thread-Safety:</b> This method is NOT thread-safe. Concurrent calls on the
+     * same socket from multiple threads will result in undefined behavior. The socket
+     * must not be closed while this method is executing.
+     *
+     * @param flags additional receive flags. {@link RecvFlags#DONT_WAIT} is automatically added.
+     * @return the received message as a byte array, or {@code null} if no message is available (EAGAIN)
+     * @throws IllegalStateException if the socket is closed
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     *
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * Socket socket = new Socket(ctx, SocketType.DEALER);
+     *
+     * byte[] data = socket.tryRecvBytes(RecvFlags.NONE);
+     * if (data != null) {
+     *     System.out.println("Received " + data.length + " bytes");
+     *     processData(data);
+     * } else {
+     *     System.out.println("No message available");
+     * }
+     *
+     * // Polling pattern
+     * while (running) {
+     *     byte[] message = socket.tryRecvBytes(RecvFlags.NONE);
+     *     if (message != null) {
+     *         handleMessage(message);
+     *     } else {
+     *         // No message available, do other work
+     *         performBackgroundTasks();
+     *     }
+     * }
+     * }</pre>
+     *
+     * @see #recvBytes(RecvFlags)
+     * @see #tryRecv(byte[], RecvFlags)
      */
-    public byte[] tryRecvBytes() {
-        try {
-            return recvBytes(RecvFlags.DONT_WAIT);
-        } catch (ZmqException e) {
-            if (e.isAgain()) {
-                return null;
-            }
-            throw e;
+    public byte[] tryRecvBytes(RecvFlags flags) {
+        if (closed) {
+            throw new IllegalStateException("Socket is closed");
         }
+
+        int combinedFlags = flags.getValue() | RecvFlags.DONT_WAIT.getValue();
+
+        // Reuse message object to avoid allocation on EAGAIN
+        recvMessage.rebuild();
+        int result = LibZmq.msgRecv(recvMessage.msgSegment, getHandle(), combinedFlags);
+        if (result == -1) {
+            int errno = LibZmq.errno();
+            if (errno == ZmqConstants.EAGAIN) {
+                return null;  // Would block - no allocation occurred
+            }
+            ZmqException.throwIfError(-1);
+        }
+        return recvMessage.toByteArray();
+    }
+
+    // ========== Convenience Methods (cppzmq-style) ==========
+
+    /**
+     * Sends a message frame with SEND_MORE flag for multipart messaging.
+     * This is a convenience method equivalent to {@code send(data, SendFlags.SEND_MORE)}.
+     * <p>
+     * <b>Thread-Safety:</b> This method is NOT thread-safe.
+     *
+     * @param data the message data to send
+     * @throws NullPointerException if data is null
+     * @throws IllegalStateException if the socket is closed
+     * @throws ZmqException if a ZMQ error occurs
+     *
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * Socket socket = new Socket(ctx, SocketType.DEALER);
+     * socket.sendMore("header".getBytes());
+     * socket.sendMore("body1".getBytes());
+     * socket.send("body2".getBytes());  // Last frame without SEND_MORE
+     * }</pre>
+     *
+     * @see #send(byte[], SendFlags)
+     * @see SendFlags#SEND_MORE
+     */
+    public void sendMore(byte[] data) {
+        send(data, SendFlags.SEND_MORE);
+    }
+
+    /**
+     * Sends a UTF-8 encoded string with SEND_MORE flag for multipart messaging.
+     * This is a convenience method equivalent to {@code send(text, SendFlags.SEND_MORE)}.
+     *
+     * @param text the message text to send
+     * @throws NullPointerException if text is null
+     * @throws IllegalStateException if the socket is closed
+     * @throws ZmqException if a ZMQ error occurs
+     *
+     * @see #sendMore(byte[])
+     */
+    public void sendMore(String text) {
+        send(text, SendFlags.SEND_MORE);
+    }
+
+    /**
+     * Sends a Message with SEND_MORE flag for multipart messaging.
+     * This is a convenience method equivalent to {@code send(msg, SendFlags.SEND_MORE)}.
+     *
+     * @param msg the message to send
+     * @throws NullPointerException if msg is null
+     * @throws IllegalStateException if the socket is closed
+     * @throws ZmqException if a ZMQ error occurs
+     *
+     * @see #sendMore(byte[])
+     */
+    public void sendMore(Message msg) {
+        send(msg, SendFlags.SEND_MORE);
+    }
+
+    /**
+     * Attempts to send a message frame with SEND_MORE flag without blocking.
+     * This is a convenience method equivalent to {@code trySend(data, SendFlags.SEND_MORE)}.
+     *
+     * @param data the message data to send
+     * @return true if sent, false if would block (EAGAIN)
+     * @throws NullPointerException if data is null
+     * @throws IllegalStateException if the socket is closed
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     *
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * Socket socket = new Socket(ctx, SocketType.DEALER);
+     * if (socket.trySendMore("header".getBytes())) {
+     *     if (socket.trySend("body".getBytes(), SendFlags.NONE)) {
+     *         System.out.println("Multipart message sent");
+     *     }
+     * }
+     * }</pre>
+     *
+     * @see #trySend(byte[], SendFlags)
+     */
+    public boolean trySendMore(byte[] data) {
+        return trySend(data, SendFlags.SEND_MORE);
+    }
+
+    /**
+     * Attempts to send a UTF-8 encoded string with SEND_MORE flag without blocking.
+     *
+     * @param text the message text to send
+     * @return true if sent, false if would block (EAGAIN)
+     * @throws NullPointerException if text is null
+     * @throws IllegalStateException if the socket is closed
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     *
+     * @see #trySendMore(byte[])
+     */
+    public boolean trySendMore(String text) {
+        return trySend(text, SendFlags.SEND_MORE);
     }
 
     // ========== Multipart Methods ==========
@@ -439,23 +853,107 @@ public final class Socket implements AutoCloseable {
     }
 
     /**
-     * Tries to receive a multipart message without blocking.
-     * @return The received multipart message, or null if would block
+     * Attempts to receive a complete multipart message without blocking.
+     * <p>
+     * This method receives all parts of a multipart message atomically. The first frame
+     * is received with {@link RecvFlags#DONT_WAIT}, so if no message is available, the
+     * method returns {@code null}. Once the first frame is received, subsequent frames
+     * are received with blocking semantics to ensure atomicity.
+     * <p>
+     * <b>Thread-Safety:</b> This method is NOT thread-safe. Concurrent calls on the
+     * same socket from multiple threads will result in undefined behavior. The socket
+     * must not be closed while this method is executing.
+     * <p>
+     * <b>Atomicity Guarantee:</b> This method ensures that either all frames of a multipart
+     * message are received, or none are received (if EAGAIN occurs on the first frame).
+     * Once the first frame is successfully received, all remaining frames are received with
+     * blocking semantics to maintain message integrity.
+     * <p>
+     * <b>Error Recovery:</b> If the first frame is received successfully but an error occurs
+     * on a subsequent frame, a {@link ZmqException} will be thrown with detailed context
+     * including the number of frames successfully received. The partial message is discarded
+     * to prevent processing incomplete data. <b>Critical:</b> The socket's internal state may
+     * be corrupted after such an error and the socket should be closed and recreated for
+     * reliable operation.
+     *
+     * @return the complete multipart message, or {@code null} if no message is available (EAGAIN)
+     * @throws IllegalStateException if the socket is closed
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN), with detailed context about
+     *         which frame failed if the error occurred during subsequent frame reception
+     *
+     * <p><b>Example:</b>
+     * <pre>{@code
+     * Socket socket = new Socket(ctx, SocketType.DEALER);
+     *
+     * MultipartMessage msg = socket.tryRecvMultipart();
+     * if (msg != null) {
+     *     System.out.println("Received " + msg.size() + " frames");
+     *     for (byte[] frame : msg) {
+     *         System.out.println("Frame: " + new String(frame, StandardCharsets.UTF_8));
+     *     }
+     * } else {
+     *     System.out.println("No message available");
+     * }
+     *
+     * // Event loop with multipart messages
+     * while (running) {
+     *     MultipartMessage message = socket.tryRecvMultipart();
+     *     if (message != null) {
+     *         // Process all frames together
+     *         String identity = new String(message.get(0), StandardCharsets.UTF_8);
+     *         String payload = new String(message.get(1), StandardCharsets.UTF_8);
+     *         handleRequest(identity, payload);
+     *     } else {
+     *         // No message, perform other work
+     *         Thread.sleep(10);
+     *     }
+     * }
+     * }</pre>
+     *
+     * @see #recvMultipart()
+     * @see MultipartMessage
      */
     public MultipartMessage tryRecvMultipart() {
-        try {
-            MultipartMessage msg = new MultipartMessage();
-            do {
-                byte[] frame = recvBytes(RecvFlags.DONT_WAIT);
-                msg.add(frame);
-            } while (hasMore());
-            return msg;
-        } catch (ZmqException e) {
-            if (e.isAgain()) {
-                return null;
-            }
-            throw e;
+        if (closed) {
+            throw new IllegalStateException("Socket is closed");
         }
+        MultipartMessage msg = new MultipartMessage();
+        int framesReceived = 0;
+
+        try (Message frame = new Message()) {
+            // First frame - non-blocking
+            int result = LibZmq.msgRecv(frame.msgSegment, getHandle(),
+                                       RecvFlags.DONT_WAIT.getValue());
+            if (result == -1) {
+                int errno = LibZmq.errno();  // Immediately after error check
+                if (errno == ZmqConstants.EAGAIN) {
+                    return null;  // Would block - no partial state
+                }
+                ZmqException.throwIfError(-1);  // Real error - throw
+            }
+            msg.add(frame.toByteArray());
+            framesReceived = 1;
+
+            // Subsequent frames - blocking to maintain atomicity
+            // Note: If an error occurs here, the socket's internal state may be corrupted
+            // with a partial message. The socket should be considered unreliable after this error.
+            while (hasMore()) {
+                frame.rebuild();
+                result = LibZmq.msgRecv(frame.msgSegment, getHandle(),
+                                       RecvFlags.NONE.getValue());
+                if (result == -1) {
+                    // Error on subsequent frame - provide detailed context
+                    int errno = LibZmq.errno();
+                    throw new ZmqException(errno,
+                            "Failed to receive complete multipart message: " +
+                            "received " + framesReceived + " frame(s) before error. " +
+                            "Socket state may be corrupted and should be closed.");
+                }
+                msg.add(frame.toByteArray());
+                framesReceived++;
+            }
+        }
+        return msg;
     }
 
     // ========== Socket Options ==========
@@ -653,6 +1151,23 @@ public final class Socket implements AutoCloseable {
         setOption(SocketOption.UNSUBSCRIBE, prefix);
     }
 
+    // ========== Buffer Management ==========
+
+    /**
+     * Checks if a buffer should be reset to save memory.
+     * Resets buffer if it's significantly larger than average usage.
+     *
+     * @param bufferSize current buffer size
+     * @param avgUsed average bytes actually used
+     * @return true if buffer should be reset
+     */
+    private boolean shouldResetBuffer(long bufferSize, long avgUsed) {
+        // Only reset if buffer is at least 4x larger than average usage
+        // and average usage is at least 1KB (avoid thrashing on tiny messages)
+        return bufferSize > avgUsed * BUFFER_RESET_THRESHOLD_MULTIPLIER
+            && avgUsed >= 1024;
+    }
+
     // ========== Monitor ==========
 
     /**
@@ -689,6 +1204,15 @@ public final class Socket implements AutoCloseable {
     public void close() {
         if (!closed) {
             closed = true;
+            // Clean up reusable Message objects
+            if (recvMessage != null) {
+                recvMessage.close();
+                recvMessage = null;
+            }
+            if (recvStringMessage != null) {
+                recvStringMessage.close();
+                recvStringMessage = null;
+            }
             // Release I/O Arena before closing socket
             if (ioArena != null) {
                 ioArena.close();

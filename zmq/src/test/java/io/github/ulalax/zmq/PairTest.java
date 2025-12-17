@@ -430,7 +430,7 @@ class PairTest {
 
                 // When: Try to receive with no data
                 byte[] buffer = new byte[256];
-                int bytesReceived = socket.tryRecv(buffer);
+                int bytesReceived = socket.tryRecv(buffer, RecvFlags.NONE);
 
                 // Then: Should timeout and return -1
                 assertThat(bytesReceived)

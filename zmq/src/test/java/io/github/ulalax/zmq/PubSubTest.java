@@ -91,7 +91,7 @@ class PubSubTest {
 
                 // Then: Should not receive the weather message (timeout)
                 byte[] buffer = new byte[256];
-                int bytesReceived = sub.tryRecv(buffer);
+                int bytesReceived = sub.tryRecv(buffer, RecvFlags.NONE);
                 assertThat(bytesReceived)
                         .as("Filtered message should not be received")
                         .isEqualTo(-1);
