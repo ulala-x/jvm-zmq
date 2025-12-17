@@ -150,6 +150,59 @@ try (Message reply = socket.recvMessage()) {
 }
 ```
 
+## Performance
+
+Benchmark results on Router-to-Router pattern (10,000 messages per iteration):
+
+### Memory Strategy Performance
+
+Different memory strategies show varying performance characteristics depending on message size:
+
+| Message Size | ByteArray | ArrayPool | Message | MessageZeroCopy |
+|--------------|-----------|-----------|---------|-----------------|
+| **64 B** | **3.71M msg/sec** | 1.83M msg/sec | 1.15M msg/sec | 26K msg/sec |
+| **1,500 B** | 835K msg/sec | 842K msg/sec | **861K msg/sec** | 24K msg/sec |
+| **65,536 B** | 89K msg/sec | **91K msg/sec** | 70K msg/sec | 16K msg/sec |
+
+**Throughput = ops/sec × 10,000 messages*
+
+**Recommendations:**
+- **Small messages (< 1KB)**: Use `ByteArray` (`socket.send(byte[])`) for maximum throughput
+- **Medium messages (1-8KB)**: Use `Message` or `ByteArray` - similar performance
+- **Large messages (> 8KB)**: Use `ArrayPool` pattern to reduce GC pressure
+- **Avoid**: `MessageZeroCopy` shows severe performance degradation due to Arena allocation overhead
+
+### Receive Mode Performance
+
+Three receive strategies compared for event-driven applications:
+
+| Message Size | Blocking | Poller | NonBlocking |
+|--------------|----------|--------|-------------|
+| **64 B** | 1.45M msg/sec | 1.43M msg/sec | 1.37M msg/sec |
+| **1,500 B** | 840K msg/sec | 824K msg/sec | 764K msg/sec |
+| **65,536 B** | 71K msg/sec | 65K msg/sec | 30K msg/sec |
+
+**Recommendations:**
+- **Single socket**: Use `Blocking` mode (`socket.recv()`) for simplest implementation
+- **Multiple sockets**: Use `Poller` for event-driven programming with ~98% of blocking performance
+- **Avoid**: `NonBlocking` with `Thread.sleep()` - not recommended for production
+
+### Running Benchmarks
+
+```bash
+# Run all JMH benchmarks
+./gradlew :zmq:jmh
+
+# Run specific benchmark
+./gradlew :zmq:jmh -Pjmh.includes=MemoryStrategyBenchmark
+./gradlew :zmq:jmh -Pjmh.includes=ReceiveModeBenchmark
+
+# Format results
+./gradlew :zmq:formatJmhResults
+```
+
+Results are saved to `zmq/build/reports/jmh/results-formatted.txt`
+
 ## Socket Types
 
 | Type | Description |
