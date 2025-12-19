@@ -13,29 +13,11 @@ Comprehensive validation report for the Socket API refactoring to cppzmq-style R
 
 ## Performance Optimizations
 
-### BENCHMARK_RESULTS.md
-Benchmark results comparing different memory allocation strategies and messaging patterns.
-- Memory strategy benchmarks
-- Throughput measurements
-- Latency analysis
-
 ### HINTPTR_POOL_PERFORMANCE_REPORT.md
 Detailed performance analysis of HintPtr pooling optimization in Message.java.
 - Arena allocation overhead measurements
 - Pool vs. direct allocation comparison
 - 3000x performance improvement documentation
-
-### MESSAGEPOOL_ANALYSIS.md
-Analysis of MessagePool design and implementation decisions.
-- Pool architecture
-- Thread-safety considerations
-- Performance characteristics
-
-### MESSAGE_POOL_IMPLEMENTATION.md
-Implementation details and design rationale for the MessagePool class.
-- API design
-- Pool management strategies
-- Usage patterns
 
 ### CALLBACK_THREAD_ANALYSIS.md
 Analysis of callback threading behavior in zero-copy message operations.

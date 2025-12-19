@@ -24,18 +24,18 @@ Comparison of four memory management approaches for ZMQ message sending.
 
 | Benchmark | Message Size | Throughput (msg/sec) | Latency (μs) | JMH Score (ops/s) |
 |-----------|--------------|---------------------|--------------|-------------------|
-| **ByteArray_SendRecv** | 64 B | 3,712,301 ±154K | 0.27 ±0.01 | **371.23 ±15.43** |
-| **ByteArray_SendRecv** | 1,500 B | 834,710 ±32K | 1.20 ±0.05 | **83.47 ±3.23** |
-| **ByteArray_SendRecv** | 65,536 B | 88,855 ±1K | 11.25 ±0.15 | **8.89 ±0.12** |
-| **ArrayPool_SendRecv** | 64 B | 1,833,300 ±43K | 0.55 ±0.01 | **183.33 ±4.30** |
-| **ArrayPool_SendRecv** | 1,500 B | 842,413 ±24K | 1.19 ±0.03 | **84.24 ±2.43** |
-| **ArrayPool_SendRecv** | 65,536 B | 91,126 ±1K | 10.97 ±0.18 | **9.11 ±0.15** |
-| **Message_SendRecv** | 64 B | 1,152,431 ±18K | 0.87 ±0.01 | **115.24 ±1.90** |
-| **Message_SendRecv** | 1,500 B | 861,393 ±56K | 1.16 ±0.08 | **86.14 ±5.61** |
-| **Message_SendRecv** | 65,536 B | 70,024 ±18K | 14.28 ±3.74 | **7.00 ±1.84** |
-| **MessageZeroCopy_SendRecv** | 64 B | 26,343 ±1K | 37.96 ±2.63 | **2.63 ±0.18** |
-| **MessageZeroCopy_SendRecv** | 1,500 B | 23,872 ±772 | 41.89 ±1.35 | **2.39 ±0.08** |
-| **MessageZeroCopy_SendRecv** | 65,536 B | 15,733 ±821 | 63.56 ±3.32 | **1.57 ±0.08** |
+| **ByteArray_SendRecv** | 64 B | 2,664,043 | 0.38 | **266.40** |
+| **ByteArray_SendRecv** | 1,500 B | 885,518 | 1.13 | **88.55** |
+| **ByteArray_SendRecv** | 65,536 B | 79,600 | 12.56 | **7.96** |
+| **ArrayPool_SendRecv** | 64 B | 1,777,342 | 0.56 | **177.73** |
+| **ArrayPool_SendRecv** | 1,500 B | 871,779 | 1.15 | **87.18** |
+| **ArrayPool_SendRecv** | 65,536 B | 92,074 | 10.86 | **9.21** |
+| **Message_SendRecv** | 64 B | 1,444,957 | 0.69 | **144.50** |
+| **Message_SendRecv** | 1,500 B | 939,667 | 1.06 | **93.97** |
+| **Message_SendRecv** | 65,536 B | 72,729 | 13.75 | **7.27** |
+| **MessageZeroCopy_SendRecv** | 64 B | 28,165 | 35.51 | **2.82** |
+| **MessageZeroCopy_SendRecv** | 1,500 B | 24,321 | 41.12 | **2.43** |
+| **MessageZeroCopy_SendRecv** | 65,536 B | 18,232 | 54.85 | **1.82** |
 
 *JMH Score = ops/sec (each operation sends 10,000 messages)*
 *Throughput = JMH Score × 10,000*
@@ -44,30 +44,30 @@ Comparison of four memory management approaches for ZMQ message sending.
 
 #### Small Messages (64 bytes)
 ```
-ByteArray:        3.71M msg/sec  ████████████████████████████████████  (100% - FASTEST)
-ArrayPool:        1.83M msg/sec  ██████████████████                    ( 49%)
-Message:          1.15M msg/sec  ███████████                           ( 31%)
-MessageZeroCopy:  26K msg/sec    ▏                                     (  1% - SLOWEST)
+ByteArray:        2.66M msg/sec  ████████████████████████████████████  (100% - FASTEST)
+ArrayPool:        1.78M msg/sec  ████████████████████████              ( 67%)
+Message:          1.44M msg/sec  ███████████████████                   ( 54%)
+MessageZeroCopy:  28K msg/sec    ▏                                     (  1% - SLOWEST)
 ```
 
-**Winner**: ByteArray (3.2× faster than Message)
+**Winner**: ByteArray (1.8× faster than Message)
 
 #### Medium Messages (1,500 bytes)
 ```
-Message:          861K msg/sec   ████████████████████████████████████  (100% - FASTEST)
-ArrayPool:        842K msg/sec   ████████████████████████████████████  ( 98%)
-ByteArray:        835K msg/sec   ███████████████████████████████████   ( 97%)
+Message:          940K msg/sec   ████████████████████████████████████  (100% - FASTEST)
+ByteArray:        886K msg/sec   █████████████████████████████████     ( 94%)
+ArrayPool:        872K msg/sec   ██████████████████████████████████    ( 93%)
 MessageZeroCopy:  24K msg/sec    ▏                                     (  3% - SLOWEST)
 ```
 
-**Winner**: Message/ArrayPool/ByteArray (nearly identical)
+**Winner**: Message (slightly better for medium-sized data)
 
 #### Large Messages (65,536 bytes)
 ```
-ArrayPool:        91K msg/sec    ████████████████████████████████████  (100% - FASTEST)
-ByteArray:        89K msg/sec    ████████████████████████████████████  ( 98%)
-Message:          70K msg/sec    ███████████████████████████           ( 77%)
-MessageZeroCopy:  16K msg/sec    ██████                                ( 17% - SLOWEST)
+ArrayPool:        92K msg/sec    ████████████████████████████████████  (100% - FASTEST)
+ByteArray:        80K msg/sec    ███████████████████████████████       ( 87%)
+Message:          73K msg/sec    ████████████████████████████          ( 79%)
+MessageZeroCopy:  18K msg/sec    ███████                               ( 20% - SLOWEST)
 ```
 
 **Winner**: ArrayPool (reduces GC pressure for large allocations)
@@ -118,7 +118,7 @@ public Message(byte[] data) {
 | Message Size | Copy Cost | Allocation/Init Overhead | Winner |
 |--------------|-----------|-------------------------|---------|
 | **64 B** | Low | **Dominates** | ByteArray (overhead >> copy) |
-| **1,500 B** | Medium | Medium | Equal (overhead ≈ copy) |
+| **1,500 B** | Medium | Medium | Message (overhead ≈ copy) |
 | **65,536 B** | High | Low | ArrayPool (copy >> overhead, pool efficiency) |
 
 ### Recommendations
@@ -331,7 +331,7 @@ All benchmark implementations are available in the repository:
 
 1. **ByteArray dominates for small messages** (< 1KB) due to socket-level buffer reuse eliminating allocation overhead
 2. **Poller achieves 98-99% of Blocking performance** with multi-socket support - use for production
-3. **MessageZeroCopy is severely broken** - avoid completely (141× slower than ByteArray for small messages)
+3. **MessageZeroCopy is severely broken** - avoid completely (95× slower than ByteArray for small messages)
 4. **ArrayPool wins for large messages** (> 8KB) by reducing GC pressure
 
 ### Selection Guide
