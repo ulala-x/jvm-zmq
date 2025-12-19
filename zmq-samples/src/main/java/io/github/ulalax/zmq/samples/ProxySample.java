@@ -263,7 +263,7 @@ public class ProxySample {
 
             while (messageCount < maxMessages) {
                 try {
-                    String message = socket.recvString();
+                    String message = socket.recvString().value();
                     messageCount++;
                     System.out.println("[" + name + "] Received: " + message);
                 } catch (ZmqException ex) {

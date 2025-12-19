@@ -509,12 +509,12 @@ class CoreTypesTest {
 
                 // When: Try to receive with timeout
                 byte[] buffer = new byte[256];
-                int result = socket.tryRecv(buffer, RecvFlags.NONE);
+                RecvResult<Integer> result = socket.recv(buffer, RecvFlags.DONT_WAIT);
 
-                // Then: Should return -1 for timeout/error
-                assertThat(result)
-                        .as("Error result code")
-                        .isEqualTo(-1);
+                // Then: Should return empty result (would block) for timeout/error
+                assertThat(result.wouldBlock())
+                        .as("Error result - would block")
+                        .isTrue();
             }
         }
     }

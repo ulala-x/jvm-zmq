@@ -54,16 +54,29 @@ try (Context ctx = new Context();
      Socket server = new Socket(ctx, SocketType.REP)) {
     server.bind("tcp://*:5555");
 
-    String request = server.recvString();
-    server.send("World");
+    // Blocking receive - returns RecvResult
+    RecvResult<String> result = server.recvString();
+    result.ifPresent(request -> {
+        System.out.println("Received: " + request);
+        server.send("World");
+    });
 }
 
 // Client
 try (Context ctx = new Context();
      Socket client = new Socket(ctx, SocketType.REQ)) {
     client.connect("tcp://localhost:5555");
-    client.send("Hello");
-    String reply = client.recvString();
+
+    // Send returns SendResult
+    SendResult sendResult = client.send("Hello");
+    sendResult.ifPresent(bytes ->
+        System.out.println("Sent " + bytes + " bytes")
+    );
+
+    // Receive with Result API
+    client.recvString().ifPresent(reply ->
+        System.out.println("Received: " + reply)
+    );
 }
 ```
 
@@ -84,7 +97,11 @@ try (Context ctx = new Context();
      Socket sub = new Socket(ctx, SocketType.SUB)) {
     sub.connect("tcp://localhost:5556");
     sub.subscribe("topic1");
-    String message = sub.recvString();
+
+    // Receive with Result API
+    sub.recvString().ifPresent(message ->
+        System.out.println("Received: " + message)
+    );
 }
 ```
 
@@ -109,13 +126,19 @@ try (Context ctx = new Context();
     peerB.send("PEER_A".getBytes(StandardCharsets.UTF_8), SendFlags.SEND_MORE);
     peerB.send("Hello from Peer B!");
 
-    // Peer A receives (first frame = sender identity)
-    byte[] senderId = peerA.recvBytes();
-    String message = peerA.recvString();
+    // Peer A receives (first frame = sender identity) - using Result API
+    RecvResult<byte[]> senderIdResult = peerA.recvBytes();
+    RecvResult<String> messageResult = peerA.recvString();
 
-    // Peer A replies using sender's identity
-    peerA.send(senderId, SendFlags.SEND_MORE);
-    peerA.send("Hello back from Peer A!");
+    if (senderIdResult.isPresent() && messageResult.isPresent()) {
+        byte[] senderId = senderIdResult.value();
+        String message = messageResult.value();
+        System.out.println("Received from peer: " + message);
+
+        // Peer A replies using sender's identity
+        peerA.send(senderId, SendFlags.SEND_MORE);
+        peerA.send("Hello back from Peer A!");
+    }
 }
 ```
 
@@ -135,19 +158,31 @@ try (Poller poller = new Poller()) {
 }
 ```
 
-### Message API
+### Non-blocking I/O with Result API
 
 ```java
 import io.github.ulalax.zmq.*;
 
-// Create and send message
-try (Message msg = new Message("Hello World")) {
-    socket.send(msg, SendFlags.NONE);
-}
+try (Context ctx = new Context();
+     Socket socket = new Socket(ctx, SocketType.DEALER)) {
+    socket.connect("tcp://localhost:5555");
 
-// Receive message
-try (Message reply = socket.recvMessage()) {
-    System.out.println(reply.toString());
+    // Non-blocking send
+    SendResult sendResult = socket.send(data, SendFlags.DONT_WAIT);
+    if (sendResult.wouldBlock()) {
+        System.out.println("Socket not ready - would block");
+    } else {
+        System.out.println("Sent " + sendResult.value() + " bytes");
+    }
+
+    // Non-blocking receive with functional style
+    socket.recvString(RecvFlags.DONT_WAIT)
+        .ifPresent(msg -> System.out.println("Received: " + msg));
+
+    // Transform received data
+    RecvResult<Integer> length = socket.recvBytes(RecvFlags.DONT_WAIT)
+        .map(bytes -> bytes.length);
+    length.ifPresent(len -> System.out.println("Length: " + len));
 }
 ```
 
@@ -363,10 +398,126 @@ jvm-zmq/
         └── *.java                 # 13 sample programs
 ```
 
+## Migration Guide (v1.x → v2.0)
+
+Version 2.0 introduces a Result-based API following the cppzmq design pattern. This provides better type safety and clearer distinction between successful operations, would-block conditions, and errors.
+
+### Breaking Changes
+
+All `send()` and `recv()` methods now return `SendResult` and `RecvResult` instead of primitive types or throwing exceptions on EAGAIN.
+
+**Old API (v1.x):**
+```java
+// Blocking operations returned values directly
+int bytesSent = socket.send(data);
+String message = socket.recvString();
+byte[] data = socket.recvBytes();
+
+// Non-blocking operations used try* methods returning boolean
+boolean sent = socket.trySend(data, SendFlags.DONT_WAIT);
+if (sent) {
+    // Success
+}
+
+String msg = socket.tryRecvString(RecvFlags.DONT_WAIT);
+if (msg != null) {
+    // Success - msg contains data
+}
+```
+
+**New API (v2.0):**
+```java
+// All operations return Result types
+SendResult sendResult = socket.send(data);
+RecvResult<String> messageResult = socket.recvString();
+RecvResult<byte[]> dataResult = socket.recvBytes();
+
+// Check success with isPresent() or use functional style
+if (sendResult.isPresent()) {
+    int bytesSent = sendResult.value();
+}
+
+// Functional style with ifPresent
+messageResult.ifPresent(msg -> processMessage(msg));
+
+// Non-blocking - check wouldBlock() explicitly
+SendResult result = socket.send(data, SendFlags.DONT_WAIT);
+if (result.wouldBlock()) {
+    // Socket not ready
+} else {
+    // Success
+    int bytes = result.value();
+}
+```
+
+### Migration Patterns
+
+| Old API | New API | Notes |
+|---------|---------|-------|
+| `int send(data)` | `SendResult send(data)` | Use `.value()` to get bytes sent |
+| `String recvString()` | `RecvResult<String> recvString()` | Use `.value()` or `.ifPresent()` |
+| `byte[] recvBytes()` | `RecvResult<byte[]> recvBytes()` | Use `.value()` or `.ifPresent()` |
+| `boolean trySend(data, flags)` | `SendResult send(data, flags)` | Use `.wouldBlock()` instead of `!sent` |
+| `String tryRecvString(flags)` | `RecvResult<String> recvString(flags)` | Use `.wouldBlock()` instead of `== null` |
+| `byte[] tryRecvBytes(flags)` | `RecvResult<byte[]> recvBytes(flags)` | Use `.wouldBlock()` instead of `== null` |
+
+### Common Migration Examples
+
+**Blocking receive:**
+```java
+// Old
+String msg = socket.recvString();
+process(msg);
+
+// New (Option 1 - Functional)
+socket.recvString().ifPresent(msg -> process(msg));
+
+// New (Option 2 - Traditional)
+RecvResult<String> result = socket.recvString();
+if (result.isPresent()) {
+    process(result.value());
+}
+```
+
+**Non-blocking with retry:**
+```java
+// Old
+byte[] data = socket.tryRecvBytes(RecvFlags.DONT_WAIT);
+if (data == null) {
+    // Would block - retry later
+    scheduleRetry();
+} else {
+    process(data);
+}
+
+// New
+RecvResult<byte[]> result = socket.recvBytes(RecvFlags.DONT_WAIT);
+if (result.wouldBlock()) {
+    scheduleRetry();
+} else {
+    process(result.value());
+}
+```
+
+**Transform received data:**
+```java
+// Old
+byte[] data = socket.recvBytes();
+int length = data.length;
+
+// New
+int length = socket.recvBytes()
+    .map(bytes -> bytes.length)
+    .orElse(0);
+```
+
+For detailed migration information, see [MIGRATION.md](MIGRATION.md).
+
 ## Documentation
 
 - [API Documentation](https://ulala-x.github.io/jvm-zmq/) - Complete Javadoc API reference
 - [Performance Benchmarks](docs/BENCHMARKS.md) - Detailed benchmark results, performance analysis, and optimization guidelines
+- [Migration Guide](MIGRATION.md) - Comprehensive guide for upgrading from v1.x to v2.0
 
 ## License
 

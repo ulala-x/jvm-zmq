@@ -90,10 +90,27 @@ public class MemoryStrategyBenchmark {
             Arrays.fill(sourceData, (byte) 'M');
             recvBuffer = new byte[messageSize];
             identityBuffer = new byte[64];
+
+            // Pre-warm MessagePool with buffers for this message size
+            // Allocate 400 buffers to ensure 100% hit rate during benchmark
+            MessagePool.prewarm(messageSize, 400);
+            System.out.println("Pre-warmed MessagePool with 400 buffers of size " + messageSize);
         }
 
         @TearDown(Level.Trial)
         public void tearDown() {
+            // Print MessagePool statistics
+            MessagePool.PoolStatistics stats = MessagePool.getStatistics();
+            System.out.println("MessagePool Statistics: " + stats);
+
+            if (stats.totalOutstanding != 0) {
+                System.out.println("WARNING: " + stats.totalOutstanding +
+                    " buffers not returned to pool (possible memory leak)");
+            }
+
+            // Clear the pool to avoid state carryover between benchmark runs
+            MessagePool.clear();
+
             if (router1 != null) {
                 router1.setOption(SocketOption.LINGER, 0);
                 router1.close();
@@ -117,8 +134,8 @@ public class MemoryStrategyBenchmark {
 
                 while (n < state.messageCount) {
                     // First message: blocking wait
-                    state.router2.recv(state.identityBuffer, RecvFlags.NONE);
-                    int size = state.router2.recv(state.recvBuffer, RecvFlags.NONE);
+                    state.router2.recv(state.identityBuffer, RecvFlags.NONE).value();
+                    int size = state.router2.recv(state.recvBuffer, RecvFlags.NONE).value();
 
                     // Simulate external delivery: allocate new array (GC pressure!)
                     byte[] outputBuffer = new byte[size];
@@ -130,10 +147,10 @@ public class MemoryStrategyBenchmark {
 
                     // Batch receive available messages (reduces syscalls)
                     while (n < state.messageCount) {
-                        int idSize = state.router2.tryRecv(state.identityBuffer, RecvFlags.NONE);
-                        if (idSize == -1) break;  // No more available
+                        RecvResult<Integer> idResult = state.router2.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                        if (idResult.wouldBlock()) break;  // No more available
 
-                        size = state.router2.recv(state.recvBuffer, RecvFlags.NONE);
+                        size = state.router2.recv(state.recvBuffer, RecvFlags.NONE).value();
 
                         // Simulate external delivery: create new output buffer (GC pressure!)
                         outputBuffer = new byte[size];
@@ -179,8 +196,8 @@ public class MemoryStrategyBenchmark {
 
                 while (n < state.messageCount) {
                     // First message: blocking wait
-                    state.router2.recv(state.identityBuffer, RecvFlags.NONE);
-                    int size = state.router2.recv(state.recvBuffer, RecvFlags.NONE);
+                    state.router2.recv(state.identityBuffer, RecvFlags.NONE).value();
+                    int size = state.router2.recv(state.recvBuffer, RecvFlags.NONE).value();
 
                     // Simulate external delivery: rent from pool (minimal GC!)
                     ByteBuf outputBuf = allocator.buffer(size);
@@ -196,10 +213,10 @@ public class MemoryStrategyBenchmark {
 
                     // Batch receive available messages (reduces syscalls)
                     while (n < state.messageCount) {
-                        int idSize = state.router2.tryRecv(state.identityBuffer, RecvFlags.NONE);
-                        if (idSize == -1) break;  // No more available
+                        RecvResult<Integer> idResult = state.router2.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                        if (idResult.wouldBlock()) break;  // No more available
 
-                        size = state.router2.recv(state.recvBuffer, RecvFlags.NONE);
+                        size = state.router2.recv(state.recvBuffer, RecvFlags.NONE).value();
 
                         // Simulate external delivery: rent from pool (minimal GC!)
                         outputBuf = allocator.buffer(size);
@@ -254,9 +271,9 @@ public class MemoryStrategyBenchmark {
 
                 while (n < state.messageCount) {
                     // First message: blocking wait
-                    state.router2.recv(state.identityBuffer, RecvFlags.NONE);
+                    state.router2.recv(state.identityBuffer, RecvFlags.NONE).value();
                     try (Message msg = new Message()) {
-                        state.router2.recv(msg, RecvFlags.NONE);
+                        state.router2.recv(msg, RecvFlags.NONE).value();
                         // Use msg.data() directly (no copy to managed memory)
                         // External consumer would use msg.data() here
                     }
@@ -266,12 +283,12 @@ public class MemoryStrategyBenchmark {
 
                     // Batch receive available messages (reduces syscalls)
                     while (n < state.messageCount) {
-                        int idSize = state.router2.tryRecv(state.identityBuffer, RecvFlags.NONE);
-                        if (idSize == -1) break;  // No more available
+                        RecvResult<Integer> idResult = state.router2.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                        if (idResult.wouldBlock()) break;  // No more available
 
                         // Receive into Message (native memory allocation)
                         try (Message msg = new Message()) {
-                            state.router2.recv(msg, RecvFlags.NONE);
+                            state.router2.recv(msg, RecvFlags.NONE).value();
                             // Use msg.data() directly (no copy to managed memory)
                             // External consumer would use msg.data() here
                         }
@@ -313,9 +330,9 @@ public class MemoryStrategyBenchmark {
 
                 while (n < state.messageCount) {
                     // First message: blocking wait
-                    state.router2.recv(state.identityBuffer, RecvFlags.NONE);
+                    state.router2.recv(state.identityBuffer, RecvFlags.NONE).value();
                     try (Message msg = new Message()) {
-                        state.router2.recv(msg, RecvFlags.NONE);
+                        state.router2.recv(msg, RecvFlags.NONE).value();
                         // Use msg.data() directly (no copy to managed memory)
                         // External consumer would use msg.data() here
                     }
@@ -325,12 +342,12 @@ public class MemoryStrategyBenchmark {
 
                     // Batch receive available messages (reduces syscalls)
                     while (n < state.messageCount) {
-                        int idSize = state.router2.tryRecv(state.identityBuffer, RecvFlags.NONE);
-                        if (idSize == -1) break;  // No more available
+                        RecvResult<Integer> idResult = state.router2.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                        if (idResult.wouldBlock()) break;  // No more available
 
                         // Receive into Message (already zero-copy from ZMQ side)
                         try (Message msg = new Message()) {
-                            state.router2.recv(msg, RecvFlags.NONE);
+                            state.router2.recv(msg, RecvFlags.NONE).value();
                             // Use msg.data() directly (no copy to managed memory)
                             // External consumer would use msg.data() here
                         }
@@ -352,6 +369,9 @@ public class MemoryStrategyBenchmark {
                     state.router1.send(idMsg, SendFlags.SEND_MORE);
                 }
 
+                // MUST use shared arena - ZMQ callback runs on internal thread (Thread-3)
+                // Confined arenas can only be closed by owner thread, would throw WrongThreadException
+                // See: CALLBACK_THREAD_ANALYSIS.md for thread safety analysis
                 Arena dataArena = Arena.ofShared();
                 MemorySegment dataSeg = dataArena.allocate(state.messageSize);
 
@@ -361,6 +381,69 @@ public class MemoryStrategyBenchmark {
                 Message payloadMsg = new Message(dataSeg, state.messageSize, data -> {
                     dataArena.close();
                 });
+
+                state.router1.send(payloadMsg, SendFlags.DONT_WAIT);
+                payloadMsg.close();
+            }
+
+            awaitCompletion(receiver, state);
+        } catch (Exception e) {
+            throw new RuntimeException("Benchmark failed", e);
+        }
+    }
+
+    @Benchmark
+    public void MessagePoolZeroCopy_SendRecv(RouterState state) {
+        state.receiverLatch = new CountDownLatch(state.messageCount);
+        state.receiverError = false;
+
+        Thread receiver = new Thread(() -> {
+            try {
+                int n = 0;
+
+                while (n < state.messageCount) {
+                    // First message: blocking wait
+                    state.router2.recv(state.identityBuffer, RecvFlags.NONE).value();
+                    try (Message msg = new Message()) {
+                        state.router2.recv(msg, RecvFlags.NONE).value();
+                        // Use msg.data() directly (no copy to managed memory)
+                        // External consumer would use msg.data() here
+                    }
+
+                    state.receiverLatch.countDown();
+                    n++;
+
+                    // Batch receive available messages (reduces syscalls)
+                    while (n < state.messageCount) {
+                        RecvResult<Integer> idResult = state.router2.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                        if (idResult.wouldBlock()) break;  // No more available
+
+                        // Receive into Message (already zero-copy from ZMQ side)
+                        try (Message msg = new Message()) {
+                            state.router2.recv(msg, RecvFlags.NONE).value();
+                            // Use msg.data() directly (no copy to managed memory)
+                            // External consumer would use msg.data() here
+                        }
+
+                        state.receiverLatch.countDown();
+                        n++;
+                    }
+                }
+            } catch (Exception e) {
+                state.receiverError = true;
+                state.receiverException = e;
+            }
+        });
+        receiver.start();
+
+        try {
+            for (int i = 0; i < state.messageCount; i++) {
+                // Send identity directly as byte[] (matches .NET benchmark)
+                state.router1.send(state.router2Id, SendFlags.SEND_MORE);
+
+                // Use MessagePool instead of creating Arena.ofShared() per message!
+                // This eliminates the ~2753.8 ns overhead
+                Message payloadMsg = Message.fromPool(state.sourceData);
 
                 state.router1.send(payloadMsg, SendFlags.DONT_WAIT);
                 payloadMsg.close();

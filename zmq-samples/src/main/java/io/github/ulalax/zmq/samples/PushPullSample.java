@@ -209,7 +209,7 @@ public class PushPullSample {
             while (true) {
                 try {
                     // Receive task from ventilator
-                    String message = receiver.recvString();
+                    String message = receiver.recvString().value();
                     String[] parts = message.split(":");
                     int taskNum = Integer.parseInt(parts[0]);
                     int workload = Integer.parseInt(parts[1]);
@@ -262,7 +262,7 @@ public class PushPullSample {
 
             // Wait for start signal
             System.out.println("[Sink] Waiting for batch start signal...");
-            String startSignal = receiver.recvString();
+            String startSignal = receiver.recvString().value();
             if (!startSignal.equals("START")) {
                 System.out.println("[Sink] Unexpected signal: " + startSignal);
                 return;
@@ -281,7 +281,7 @@ public class PushPullSample {
 
             while (resultsReceived < TASK_COUNT) {
                 try {
-                    String result = receiver.recvString();
+                    String result = receiver.recvString().value();
                     String[] parts = result.split(":");
                     int workerId = Integer.parseInt(parts[0]);
                     int taskNum = Integer.parseInt(parts[1]);

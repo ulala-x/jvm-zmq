@@ -191,12 +191,12 @@ class SocketTest {
     }
 
     @Nested
-    @DisplayName("TrySend and TryRecv with Errno Checking")
-    class TrySendAndTryRecvWithErrnoChecking {
+    @DisplayName("Send and Recv with DONT_WAIT flag")
+    class SendAndRecvWithDontWaitFlag {
 
         @Test
-        @DisplayName("Should trySend with SEND_MORE flag (multipart transmission)")
-        void should_TrySend_With_SendMore_Flag() throws Exception {
+        @DisplayName("Should send with SEND_MORE flag (multipart transmission)")
+        void should_Send_With_SendMore_Flag() throws Exception {
             // Given: A PUSH-PULL pair (simpler than ROUTER-DEALER for multipart testing)
             try (Context ctx = new Context();
                  Socket push = new Socket(ctx, SocketType.PUSH);
@@ -206,19 +206,15 @@ class SocketTest {
                 pull.connect("inproc://test-sendmore");
                 Thread.sleep(100);
 
-                // When: Send multipart using trySend with SEND_MORE flag
-                boolean sent1 = push.trySend("part1".getBytes(StandardCharsets.UTF_8), SendFlags.SEND_MORE);
-                boolean sent2 = push.trySend("part2".getBytes(StandardCharsets.UTF_8), SendFlags.NONE);
-
-                // Then: Both sends should succeed
-                assertThat(sent1).as("First part sent").isTrue();
-                assertThat(sent2).as("Second part sent").isTrue();
+                // When: Send multipart using SEND_MORE flag (blocking)
+                push.send("part1".getBytes(StandardCharsets.UTF_8), SendFlags.SEND_MORE);
+                push.send("part2".getBytes(StandardCharsets.UTF_8), SendFlags.NONE);
 
                 Thread.sleep(50);
 
                 // And: Verify reception
                 byte[] buffer = new byte[256];
-                int n1 = pull.recv(buffer);
+                int n1 = pull.recv(buffer, RecvFlags.NONE).value();
                 assertThat(new String(buffer, 0, n1, StandardCharsets.UTF_8))
                         .as("First part received")
                         .isEqualTo("part1");
@@ -226,7 +222,7 @@ class SocketTest {
                         .as("Has more parts after first")
                         .isTrue();
 
-                int n2 = pull.recv(buffer);
+                int n2 = pull.recv(buffer, RecvFlags.NONE).value();
                 assertThat(new String(buffer, 0, n2, StandardCharsets.UTF_8))
                         .as("Second part received")
                         .isEqualTo("part2");
@@ -237,8 +233,8 @@ class SocketTest {
         }
 
         @Test
-        @DisplayName("Should tryRecv return -1 for EAGAIN (no exception thrown)")
-        void should_TryRecv_Return_Negative_One_For_EAGAIN() throws Exception {
+        @DisplayName("Should recv with DONT_WAIT return empty result for EAGAIN (no exception thrown)")
+        void should_Recv_With_DontWait_Return_Empty_For_EAGAIN() throws Exception {
             // Given: A PULL socket with no incoming messages
             try (Context ctx = new Context();
                  Socket socket = new Socket(ctx, SocketType.PULL)) {
@@ -247,18 +243,21 @@ class SocketTest {
 
                 // When: Try to receive with no data
                 byte[] buffer = new byte[256];
-                int result = socket.tryRecv(buffer, RecvFlags.NONE);
+                RecvResult<Integer> result = socket.recv(buffer, RecvFlags.DONT_WAIT);
 
-                // Then: Should return -1, not throw exception
-                assertThat(result)
-                        .as("tryRecv should return -1 for EAGAIN")
-                        .isEqualTo(-1);
+                // Then: Should return empty result, not throw exception
+                assertThat(result.wouldBlock())
+                        .as("recv with DONT_WAIT should return empty result for EAGAIN")
+                        .isTrue();
+                assertThat(result.isPresent())
+                        .as("result should not be present")
+                        .isFalse();
             }
         }
 
         @Test
-        @DisplayName("Should tryRecvString return null for EAGAIN")
-        void should_TryRecvString_Return_Null_For_EAGAIN() throws Exception {
+        @DisplayName("Should recvString with DONT_WAIT return empty result for EAGAIN")
+        void should_RecvString_With_DontWait_Return_Empty_For_EAGAIN() throws Exception {
             // Given: A PULL socket with no incoming messages
             try (Context ctx = new Context();
                  Socket socket = new Socket(ctx, SocketType.PULL)) {
@@ -266,18 +265,21 @@ class SocketTest {
                 socket.bind("inproc://test-eagain-string");
 
                 // When: Try to receive with no data
-                String result = socket.tryRecvString(RecvFlags.NONE);
+                RecvResult<String> result = socket.recvString(RecvFlags.DONT_WAIT);
 
-                // Then: Should return null, not throw exception
-                assertThat(result)
-                        .as("tryRecvString should return null for EAGAIN")
-                        .isNull();
+                // Then: Should return empty result, not throw exception
+                assertThat(result.wouldBlock())
+                        .as("recvString with DONT_WAIT should return empty result for EAGAIN")
+                        .isTrue();
+                assertThat(result.isPresent())
+                        .as("result should not be present")
+                        .isFalse();
             }
         }
 
         @Test
-        @DisplayName("Should tryRecvBytes return null for EAGAIN")
-        void should_TryRecvBytes_Return_Null_For_EAGAIN() throws Exception {
+        @DisplayName("Should recvBytes with DONT_WAIT return empty result for EAGAIN")
+        void should_RecvBytes_With_DontWait_Return_Empty_For_EAGAIN() throws Exception {
             // Given: A PULL socket with no incoming messages
             try (Context ctx = new Context();
                  Socket socket = new Socket(ctx, SocketType.PULL)) {
@@ -285,37 +287,44 @@ class SocketTest {
                 socket.bind("inproc://test-eagain-bytes");
 
                 // When: Try to receive with no data
-                byte[] result = socket.tryRecvBytes(RecvFlags.NONE);
+                RecvResult<byte[]> result = socket.recvBytes(RecvFlags.DONT_WAIT);
 
-                // Then: Should return null, not throw exception
-                assertThat(result)
-                        .as("tryRecvBytes should return null for EAGAIN")
-                        .isNull();
+                // Then: Should return empty result, not throw exception
+                assertThat(result.wouldBlock())
+                        .as("recvBytes with DONT_WAIT should return empty result for EAGAIN")
+                        .isTrue();
+                assertThat(result.isPresent())
+                        .as("result should not be present")
+                        .isFalse();
             }
         }
 
         @Test
-        @DisplayName("Should tryRecvMultipart return null for EAGAIN")
-        void should_TryRecvMultipart_Return_Null_For_EAGAIN() throws Exception {
-            // Given: A PULL socket with no incoming messages
+        @DisplayName("Should recvMultipart return empty result for EAGAIN (non-blocking)")
+        void should_RecvMultipart_Return_Empty_For_EAGAIN() throws Exception {
+            // Given: A PULL socket with no incoming messages and non-blocking receive timeout
             try (Context ctx = new Context();
                  Socket socket = new Socket(ctx, SocketType.PULL)) {
 
                 socket.bind("inproc://test-eagain-multipart");
+                socket.setOption(SocketOption.RCVTIMEO, 10);  // Very short timeout for non-blocking behavior
 
                 // When: Try to receive with no data
-                MultipartMessage result = socket.tryRecvMultipart();
+                RecvResult<MultipartMessage> result = socket.recvMultipart();
 
-                // Then: Should return null, not throw exception
-                assertThat(result)
-                        .as("tryRecvMultipart should return null for EAGAIN")
-                        .isNull();
+                // Then: Should return empty result, not throw exception
+                assertThat(result.wouldBlock())
+                        .as("recvMultipart should return empty result for EAGAIN")
+                        .isTrue();
+                assertThat(result.isPresent())
+                        .as("result should not be present")
+                        .isFalse();
             }
         }
 
         @Test
-        @DisplayName("Should trySend and tryRecv work with flags")
-        void should_TrySend_And_TryRecv_Work_With_Flags() throws Exception {
+        @DisplayName("Should send and recv work with DONT_WAIT flag")
+        void should_Send_And_Recv_Work_With_DontWait_Flag() throws Exception {
             // Given: A PUSH-PULL pair
             try (Context ctx = new Context();
                  Socket push = new Socket(ctx, SocketType.PUSH);
@@ -325,21 +334,24 @@ class SocketTest {
                 pull.connect("inproc://test-flags");
                 Thread.sleep(100);
 
-                // When: Send with NONE flags
-                boolean sent = push.trySend("test".getBytes(StandardCharsets.UTF_8), SendFlags.NONE);
-                assertThat(sent).as("Message sent").isTrue();
+                // When: Send with DONT_WAIT flag
+                SendResult sent = push.send("test".getBytes(StandardCharsets.UTF_8), SendFlags.DONT_WAIT);
+                assertThat(sent.isPresent()).as("Message sent").isTrue();
 
                 Thread.sleep(50);
 
-                // And: Receive with NONE flags
+                // And: Receive with DONT_WAIT flag
                 byte[] buffer = new byte[256];
-                int bytesReceived = pull.tryRecv(buffer, RecvFlags.NONE);
+                RecvResult<Integer> bytesReceived = pull.recv(buffer, RecvFlags.DONT_WAIT);
 
                 // Then: Should receive the message successfully
-                assertThat(bytesReceived)
+                assertThat(bytesReceived.isPresent())
+                        .as("Message received")
+                        .isTrue();
+                assertThat(bytesReceived.value())
                         .as("Bytes received")
                         .isGreaterThan(0);
-                assertThat(new String(buffer, 0, bytesReceived, StandardCharsets.UTF_8))
+                assertThat(new String(buffer, 0, bytesReceived.value(), StandardCharsets.UTF_8))
                         .as("Received message content")
                         .isEqualTo("test");
             }

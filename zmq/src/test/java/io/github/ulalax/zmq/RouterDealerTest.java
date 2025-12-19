@@ -94,7 +94,7 @@ class RouterDealerTest {
                         router.send(reply, SendFlags.NONE);
 
                         // DEALER receives reply
-                        byte[] response = dealer.recvBytes();
+                        byte[] response = dealer.recvBytes().value();
                         assertThat(new String(response, StandardCharsets.UTF_8))
                                 .as("DEALER received response")
                                 .isEqualTo("Response");
@@ -211,8 +211,8 @@ class RouterDealerTest {
                 }
 
                 // Then: Each dealer receives correct reply
-                byte[] resp1 = dealer1.recvBytes();
-                byte[] resp2 = dealer2.recvBytes();
+                byte[] resp1 = dealer1.recvBytes().value();
+                byte[] resp2 = dealer2.recvBytes().value();
 
                 assertThat(new String(resp1, StandardCharsets.UTF_8))
                         .as("DEALER1 response")
@@ -340,7 +340,7 @@ class RouterDealerTest {
                     }
 
                     // Worker receives and processes
-                    byte[] workRequest = worker.recvBytes();
+                    byte[] workRequest = worker.recvBytes().value();
                     assertThat(new String(workRequest, StandardCharsets.UTF_8))
                             .isEqualTo("Client request");
 
@@ -363,7 +363,7 @@ class RouterDealerTest {
                             broker.send(respMsg, SendFlags.NONE);
 
                             // Client receives response
-                            byte[] clientResp = client.recvBytes();
+                            byte[] clientResp = client.recvBytes().value();
                             assertThat(new String(clientResp, StandardCharsets.UTF_8))
                                     .as("Client received worker response")
                                     .isEqualTo("Worker response");

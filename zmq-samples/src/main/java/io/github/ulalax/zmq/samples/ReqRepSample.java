@@ -66,7 +66,7 @@ public class ReqRepSample {
             System.out.println("[Server] Listening on tcp://*:5555");
 
             for (int i = 0; i < 5; i++) {
-                String request = socket.recvString();
+                String request = socket.recvString().value();
                 System.out.println("[Server] Received: " + request);
 
                 // Simulate processing time
@@ -109,7 +109,7 @@ public class ReqRepSample {
                 socket.send(request);
                 System.out.println("[Client] Sent: " + request);
 
-                String reply = socket.recvString();
+                String reply = socket.recvString().value();
                 System.out.println("[Client] Received: " + reply);
             }
 

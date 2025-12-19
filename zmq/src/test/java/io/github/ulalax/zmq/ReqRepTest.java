@@ -39,7 +39,7 @@ class ReqRepTest {
                 client.send(request);
 
                 // Then: Server receives the request
-                byte[] received = server.recvBytes();
+                byte[] received = server.recvBytes().value();
                 assertThat(received).isNotNull();
                 assertThat(new String(received, StandardCharsets.UTF_8))
                         .as("Received request")
@@ -50,7 +50,7 @@ class ReqRepTest {
                 server.send(reply);
 
                 // Then: Client receives the reply
-                byte[] response = client.recvBytes();
+                byte[] response = client.recvBytes().value();
                 assertThat(response).isNotNull();
                 assertThat(new String(response, StandardCharsets.UTF_8))
                         .as("Received reply")
@@ -76,7 +76,7 @@ class ReqRepTest {
                     String request = "Request-" + i;
                     client.send(request);
 
-                    byte[] received = server.recvBytes();
+                    byte[] received = server.recvBytes().value();
                     assertThat(new String(received, StandardCharsets.UTF_8))
                             .as("Request #" + i)
                             .isEqualTo(request);
@@ -84,7 +84,7 @@ class ReqRepTest {
                     String reply = "Reply-" + i;
                     server.send(reply);
 
-                    byte[] response = client.recvBytes();
+                    byte[] response = client.recvBytes().value();
                     assertThat(new String(response, StandardCharsets.UTF_8))
                             .as("Reply #" + i)
                             .isEqualTo(reply);
@@ -118,7 +118,7 @@ class ReqRepTest {
                 client.send(binaryData);
 
                 // Then: Server should receive exact binary data
-                byte[] received = server.recvBytes();
+                byte[] received = server.recvBytes().value();
                 assertThat(received)
                         .as("Received binary data")
                         .isEqualTo(binaryData);
@@ -127,7 +127,7 @@ class ReqRepTest {
                 server.send(binaryData);
 
                 // Then: Client should receive exact binary data
-                byte[] response = client.recvBytes();
+                byte[] response = client.recvBytes().value();
                 assertThat(response)
                         .as("Echoed binary data")
                         .isEqualTo(binaryData);

@@ -42,7 +42,7 @@ class PushPullTest {
 
                 // Then: Pull should receive the message
                 puller.setOption(SocketOption.RCVTIMEO, 1000);
-                byte[] received = puller.recvBytes();
+                byte[] received = puller.recvBytes().value();
 
                 assertThat(received).isNotNull();
                 assertThat(new String(received, StandardCharsets.UTF_8))
@@ -71,7 +71,7 @@ class PushPullTest {
                     String message = "Message-" + i;
                     pusher.send(message);
 
-                    byte[] received = puller.recvBytes();
+                    byte[] received = puller.recvBytes().value();
                     assertThat(new String(received, StandardCharsets.UTF_8))
                             .as("Message #" + i)
                             .isEqualTo(message);
@@ -114,12 +114,12 @@ class PushPullTest {
                 List<String> received2 = new ArrayList<>();
 
                 for (int i = 0; i < messageCount / 2; i++) {
-                    byte[] msg1 = puller1.recvBytes();
+                    byte[] msg1 = puller1.recvBytes().value();
                     if (msg1 != null) {
                         received1.add(new String(msg1, StandardCharsets.UTF_8));
                     }
 
-                    byte[] msg2 = puller2.recvBytes();
+                    byte[] msg2 = puller2.recvBytes().value();
                     if (msg2 != null) {
                         received2.add(new String(msg2, StandardCharsets.UTF_8));
                     }
@@ -168,7 +168,7 @@ class PushPullTest {
                 // Then: Puller should receive both messages
                 List<String> received = new ArrayList<>();
                 for (int i = 0; i < 2; i++) {
-                    byte[] msg = puller.recvBytes();
+                    byte[] msg = puller.recvBytes().value();
                     assertThat(msg).isNotNull();
                     received.add(new String(msg, StandardCharsets.UTF_8));
                 }
@@ -212,13 +212,13 @@ class PushPullTest {
                 producer.send(input);
 
                 // Worker receives, processes, and forwards
-                byte[] received = workerIn.recvBytes();
+                byte[] received = workerIn.recvBytes().value();
                 assertThat(received).isNotNull();
                 String processed = new String(received, StandardCharsets.UTF_8) + "-processed";
                 workerOut.send(processed);
 
                 // Then: Sink receives processed data
-                byte[] output = sink.recvBytes();
+                byte[] output = sink.recvBytes().value();
                 assertThat(output).isNotNull();
                 assertThat(new String(output, StandardCharsets.UTF_8))
                         .as("Processed output")
@@ -276,7 +276,7 @@ class PushPullTest {
 
                 int totalExpected = threadCount * messagesPerThread;
                 for (int i = 0; i < totalExpected; i++) {
-                    byte[] msg = puller.recvBytes();
+                    byte[] msg = puller.recvBytes().value();
                     if (msg != null) {
                         receivedMessages.add(new String(msg, StandardCharsets.UTF_8));
                     }
@@ -312,7 +312,7 @@ class PushPullTest {
                 pusher.send(binaryData);
 
                 // Then: Should receive exact binary data
-                byte[] received = puller.recvBytes();
+                byte[] received = puller.recvBytes().value();
                 assertThat(received)
                         .as("Binary data integrity")
                         .isEqualTo(binaryData);
@@ -341,7 +341,7 @@ class PushPullTest {
                 pusher.send(largeData);
 
                 // Then: Should receive complete large data
-                byte[] received = puller.recvBytes();
+                byte[] received = puller.recvBytes().value();
                 assertThat(received)
                         .as("Large binary data integrity")
                         .hasSize(largeData.length)
@@ -395,8 +395,8 @@ class PushPullTest {
                 // Then: Should return immediately (either succeed or fail with EAGAIN)
                 long startTime = System.currentTimeMillis();
 
-                // Using trySend which handles EAGAIN gracefully
-                boolean sent = pusher.trySend("data", SendFlags.NONE);
+                // Using send with DONT_WAIT which handles EAGAIN gracefully
+                SendResult sent = pusher.send("data", SendFlags.DONT_WAIT);
 
                 long elapsedTime = System.currentTimeMillis() - startTime;
 
@@ -405,10 +405,10 @@ class PushPullTest {
                         .as("Send operation should be non-blocking")
                         .isLessThan(200L);
 
-                // Without a connected puller, send will likely fail or queue locally
-                assertThat(sent)
-                        .as("Send without puller may succeed (queued) or fail")
-                        .isIn(true, false);
+                // Without a connected puller, send will likely fail (would block) or queue locally
+                assertThat(sent.isPresent() || sent.wouldBlock())
+                        .as("Send without puller may succeed (queued) or would block")
+                        .isTrue();
             }
         }
     }
@@ -435,7 +435,7 @@ class PushPullTest {
                 pusher.send("");
 
                 // Then: Should receive empty message
-                byte[] received = puller.recvBytes();
+                byte[] received = puller.recvBytes().value();
                 assertThat(received)
                         .as("Empty message")
                         .isNotNull()
@@ -461,7 +461,7 @@ class PushPullTest {
 
                 // Then: Should handle gracefully
                 puller.setOption(SocketOption.RCVTIMEO, 1000);
-                byte[] received = puller.recvBytes();
+                byte[] received = puller.recvBytes().value();
                 assertThat(received).isNotNull();
             }
         }

@@ -310,7 +310,7 @@ public class SteerableProxySample {
 
             while (timeouts < 3) {
                 try {
-                    String message = socket.recvString();
+                    String message = socket.recvString().value();
                     System.out.println("[Subscriber] Received: " + message);
                     received++;
                     timeouts = 0; // Reset timeout counter on successful receive

@@ -124,24 +124,24 @@ public class ReceiveModeBenchmark {
     /**
      * Blocking receive mode - highest performance, simplest implementation.
      * Uses blocking Recv() for first message, then batch-processes available messages
-     * with TryRecv() to minimize syscall overhead.
+     * with non-blocking recv to minimize syscall overhead.
      */
     private void receiveBlocking(Socket socket, RouterState state) {
         try {
             int n = 0;
             while (n < state.messageCount) {
                 // First message: blocking wait (maintains Blocking semantics)
-                socket.recv(state.identityBuffer, RecvFlags.NONE);
-                socket.recv(state.recvBuffer, RecvFlags.NONE);
+                socket.recv(state.identityBuffer, RecvFlags.NONE).value();
+                socket.recv(state.recvBuffer, RecvFlags.NONE).value();
                 state.receiverLatch.countDown();
                 n++;
 
                 // Batch receive available messages (reduces syscalls)
                 while (n < state.messageCount) {
-                    int idSize = socket.tryRecv(state.identityBuffer, RecvFlags.NONE);
-                    if (idSize == -1) break;  // No more available
+                    RecvResult<Integer> idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                    if (idResult.wouldBlock()) break;  // No more available
 
-                    socket.tryRecv(state.recvBuffer, RecvFlags.NONE);
+                    socket.recv(state.recvBuffer, RecvFlags.NONE).value();
                     state.receiverLatch.countDown();
                     n++;
                 }
@@ -161,26 +161,23 @@ public class ReceiveModeBenchmark {
         try {
             int n = 0;
             while (n < state.messageCount) {
-                try {
-                    socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                    socket.recv(state.recvBuffer, RecvFlags.DONT_WAIT);
+                RecvResult<Integer> idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                if (idResult.isPresent()) {
+                    socket.recv(state.recvBuffer, RecvFlags.DONT_WAIT).value();
                     state.receiverLatch.countDown();
                     n++;
 
                     // Batch receive without sleep
                     while (n < state.messageCount) {
-                        try {
-                            socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                            socket.recv(state.recvBuffer, RecvFlags.DONT_WAIT);
-                            state.receiverLatch.countDown();
-                            n++;
-                        } catch (ZmqException e) {
-                            if (!e.isAgain()) throw e;
+                        RecvResult<Integer> batchIdResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                        if (batchIdResult.wouldBlock()) {
                             break;
                         }
+                        socket.recv(state.recvBuffer, RecvFlags.DONT_WAIT).value();
+                        state.receiverLatch.countDown();
+                        n++;
                     }
-                } catch (ZmqException e) {
-                    if (!e.isAgain()) throw e;
+                } else {
                     Thread.sleep(1);  // Wait before retry
                 }
             }
@@ -205,10 +202,10 @@ public class ReceiveModeBenchmark {
 
                 // Batch receive all available messages
                 while (n < state.messageCount) {
-                    int idSize = socket.tryRecv(state.identityBuffer, RecvFlags.NONE);
-                    if (idSize == -1) break;  // No more available
+                    RecvResult<Integer> idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                    if (idResult.wouldBlock()) break;  // No more available
 
-                    socket.tryRecv(state.recvBuffer, RecvFlags.NONE);
+                    socket.recv(state.recvBuffer, RecvFlags.NONE).value();
                     state.receiverLatch.countDown();
                     n++;
                 }

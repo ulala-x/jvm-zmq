@@ -99,6 +99,9 @@ public final class MultipartMessage implements Iterable<byte[]> {
      * It will block until the first frame is available, then continues receiving
      * all remaining frames to maintain atomicity.
      * <p>
+     * <b>Note:</b> This is a convenience method that delegates to {@link Socket#recvMultipart()}.
+     * For non-blocking behavior, use {@code socket.recvMultipart()} directly and check the result.
+     * <p>
      * <b>Error Recovery:</b> If an error occurs while receiving subsequent frames,
      * a {@link io.github.ulalax.zmq.core.ZmqException} will be thrown with detailed
      * context including the number of frames successfully received. The partial
@@ -113,27 +116,20 @@ public final class MultipartMessage implements Iterable<byte[]> {
      *         frame reception
      */
     public static MultipartMessage recv(Socket socket) {
-        MultipartMessage msg = new MultipartMessage();
-        int framesReceived = 0;
-
-        try {
-            do {
-                byte[] frame = socket.recvBytes();
-                msg.add(frame);
-                framesReceived++;
-            } while (socket.hasMore());
-        } catch (io.github.ulalax.zmq.core.ZmqException e) {
-            // If error occurs after receiving some frames, provide better context
-            if (framesReceived > 0) {
-                throw new io.github.ulalax.zmq.core.ZmqException(e.getErrorNumber(),
-                        "Failed to receive complete multipart message: " +
-                        "received " + framesReceived + " frame(s) before error. " +
-                        "Socket state may be corrupted and should be closed.");
+        // Use socket.recvMultipart() and block until a message is available
+        while (true) {
+            RecvResult<MultipartMessage> result = socket.recvMultipart();
+            if (result.isPresent()) {
+                return result.value();
             }
-            // First frame error - just rethrow as-is
-            throw e;
+            // Would block - sleep briefly and retry
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while waiting for multipart message", e);
+            }
         }
-        return msg;
     }
 
     /**

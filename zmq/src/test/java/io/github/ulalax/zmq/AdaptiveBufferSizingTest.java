@@ -34,8 +34,8 @@ class AdaptiveBufferSizingTest {
             for (int i = 0; i < largeMessage.length; i++) {
                 largeMessage[i] = (byte) (i % 256);
             }
-            assertTrue(sender.trySend(largeMessage, SendFlags.NONE), "Large message should be sent");
-            receiver.tryRecv(new byte[32 * 1024], RecvFlags.NONE); // Consume message
+            assertTrue(sender.send(largeMessage, SendFlags.DONT_WAIT).isPresent(), "Large message should be sent");
+            receiver.recv(new byte[32 * 1024], RecvFlags.DONT_WAIT); // Consume message
 
             // Get initial buffer size (should be >= 32KB)
             int initialBufferSize = getSendBufferSize(sender);
@@ -45,9 +45,9 @@ class AdaptiveBufferSizingTest {
             // Step 2: Send 100 small messages (1KB each) to trigger adaptive resizing
             byte[] smallMessage = new byte[1024];
             for (int i = 0; i < 100; i++) {
-                assertTrue(sender.trySend(smallMessage, SendFlags.NONE),
+                assertTrue(sender.send(smallMessage, SendFlags.DONT_WAIT).isPresent(),
                         "Small message " + i + " should be sent");
-                receiver.tryRecv(new byte[1024], RecvFlags.NONE); // Consume message
+                receiver.recv(new byte[1024], RecvFlags.DONT_WAIT); // Consume message
             }
 
             // Step 3: Verify buffer has shrunk to reasonable size
@@ -88,8 +88,8 @@ class AdaptiveBufferSizingTest {
 
             // Step 1: Receive one large message (32KB) to expand buffer
             byte[] largeMessage = new byte[32 * 1024];
-            sender.trySend(largeMessage, SendFlags.NONE);
-            int received = receiver.tryRecv(new byte[32 * 1024], RecvFlags.NONE);
+            sender.send(largeMessage, SendFlags.DONT_WAIT);
+            int received = receiver.recv(new byte[32 * 1024], RecvFlags.DONT_WAIT).value();
             assertEquals(32 * 1024, received, "Should receive full large message");
 
             // Get initial buffer size
@@ -100,8 +100,8 @@ class AdaptiveBufferSizingTest {
             // Step 2: Receive 100 small messages (1KB each)
             byte[] smallMessage = new byte[1024];
             for (int i = 0; i < 100; i++) {
-                sender.trySend(smallMessage, SendFlags.NONE);
-                received = receiver.tryRecv(new byte[1024], RecvFlags.NONE);
+                sender.send(smallMessage, SendFlags.DONT_WAIT);
+                received = receiver.recv(new byte[1024], RecvFlags.DONT_WAIT).value();
                 assertEquals(1024, received, "Should receive 1KB message");
             }
 
@@ -144,8 +144,8 @@ class AdaptiveBufferSizingTest {
             // Send 100 large messages (10KB each)
             byte[] message = new byte[10 * 1024];
             for (int i = 0; i < 100; i++) {
-                assertTrue(sender.trySend(message, SendFlags.NONE));
-                receiver.tryRecv(new byte[10 * 1024], RecvFlags.NONE);
+                assertTrue(sender.send(message, SendFlags.DONT_WAIT).isPresent());
+                receiver.recv(new byte[10 * 1024], RecvFlags.DONT_WAIT);
             }
 
             // Buffer should still be large (at least 10KB, probably exactly 10KB or slightly larger)
@@ -173,8 +173,8 @@ class AdaptiveBufferSizingTest {
 
             // First expand buffer with one large message
             byte[] largeMessage = new byte[16 * 1024];
-            sender.trySend(largeMessage, SendFlags.NONE);
-            receiver.tryRecv(new byte[16 * 1024], RecvFlags.NONE);
+            sender.send(largeMessage, SendFlags.DONT_WAIT);
+            receiver.recv(new byte[16 * 1024], RecvFlags.DONT_WAIT);
 
             int initialBufferSize = getSendBufferSize(sender);
 
@@ -183,8 +183,8 @@ class AdaptiveBufferSizingTest {
             // So buffer should NOT reset (even though it's 4x larger)
             byte[] tinyMessage = new byte[100];
             for (int i = 0; i < 100; i++) {
-                sender.trySend(tinyMessage, SendFlags.NONE);
-                receiver.tryRecv(new byte[100], RecvFlags.NONE);
+                sender.send(tinyMessage, SendFlags.DONT_WAIT);
+                receiver.recv(new byte[100], RecvFlags.DONT_WAIT);
             }
 
             int finalBufferSize = getSendBufferSize(sender);

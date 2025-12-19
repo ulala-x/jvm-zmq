@@ -98,7 +98,7 @@ public class PairSample {
             System.out.println("[Pair-A] Sent: " + message1);
 
             // Receive response
-            String received1 = socket.recvString();
+            String received1 = socket.recvString().value();
             System.out.println("[Pair-A] Received: " + received1);
 
             // Send another message
@@ -107,7 +107,7 @@ public class PairSample {
             System.out.println("[Pair-A] Sent: " + message2);
 
             // Receive final response
-            String received2 = socket.recvString();
+            String received2 = socket.recvString().value();
             System.out.println("[Pair-A] Received: " + received2);
 
             // Send final message
@@ -150,7 +150,7 @@ public class PairSample {
             System.out.println("[Pair-B] Connected to " + ENDPOINT);
 
             // Receive first message
-            String received1 = socket.recvString();
+            String received1 = socket.recvString().value();
             System.out.println("[Pair-B] Received: " + received1);
 
             // Send response
@@ -159,7 +159,7 @@ public class PairSample {
             System.out.println("[Pair-B] Sent: " + message1);
 
             // Receive second message
-            String received2 = socket.recvString();
+            String received2 = socket.recvString().value();
             System.out.println("[Pair-B] Received: " + received2);
 
             // Send final response
@@ -168,7 +168,7 @@ public class PairSample {
             System.out.println("[Pair-B] Sent: " + message2);
 
             // Receive final message
-            String received3 = socket.recvString();
+            String received3 = socket.recvString().value();
             System.out.println("[Pair-B] Received: " + received3);
 
             System.out.println("[Pair-B] Done");

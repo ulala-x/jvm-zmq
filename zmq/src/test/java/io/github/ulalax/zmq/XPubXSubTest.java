@@ -47,7 +47,7 @@ class XPubXSubTest {
                 Thread.sleep(200);
 
                 // Then: XPUB receives subscription message with 0x01 indicator
-                byte[] subMsg = xpub.recvBytes();
+                byte[] subMsg = xpub.recvBytes().value();
                 assertThat(subMsg)
                         .as("Subscription message")
                         .isNotNull();
@@ -81,7 +81,7 @@ class XPubXSubTest {
 
                 sub.subscribe("topic");
                 Thread.sleep(200);
-                byte[] subMsg = xpub.recvBytes();
+                byte[] subMsg = xpub.recvBytes().value();
                 assertThat(subMsg[0])
                         .as("Subscribe indicator")
                         .isEqualTo((byte) 0x01);
@@ -91,7 +91,7 @@ class XPubXSubTest {
                 Thread.sleep(200);
 
                 // Then: XPUB receives unsubscription message with 0x00 indicator
-                byte[] unsubMsg = xpub.recvBytes();
+                byte[] unsubMsg = xpub.recvBytes().value();
                 assertThat(unsubMsg[0])
                         .as("Unsubscribe indicator")
                         .isEqualTo((byte) 0x00);
@@ -135,7 +135,7 @@ class XPubXSubTest {
                 xpub.send("Hello from XPub");
 
                 // Then: Subscriber receives the message
-                String msg = sub.recvString();
+                String msg = sub.recvString().value();
                 assertThat(msg)
                         .as("Received message")
                         .isEqualTo("Hello from XPub");
@@ -178,7 +178,7 @@ class XPubXSubTest {
                 Thread.sleep(100);
 
                 // Then: XSUB receives the published message
-                String msg = xsub.recvString();
+                String msg = xsub.recvString().value();
                 assertThat(msg)
                         .as("Received message")
                         .isEqualTo("Message from Pub");

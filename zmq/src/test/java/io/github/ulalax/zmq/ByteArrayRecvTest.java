@@ -140,11 +140,11 @@ public class ByteArrayRecvTest {
                     System.out.println("[ByteArray Receiver] Waiting for message " + (i + 1) + "...");
 
                     // Receive identity frame
-                    int idSize = router2.recv(identityBuffer, RecvFlags.NONE);
+                    int idSize = router2.recv(identityBuffer, RecvFlags.NONE).value();
                     System.out.println("[ByteArray Receiver] Received identity frame, size=" + idSize);
 
                     // Receive payload frame
-                    int payloadSize = router2.recv(recvBuffer, RecvFlags.NONE);
+                    int payloadSize = router2.recv(recvBuffer, RecvFlags.NONE).value();
                     System.out.println("[ByteArray Receiver] Received payload frame, size=" + payloadSize);
 
                     latch.countDown();

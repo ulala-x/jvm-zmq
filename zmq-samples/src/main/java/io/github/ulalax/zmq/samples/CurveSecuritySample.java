@@ -124,7 +124,7 @@ public class CurveSecuritySample {
 
             for (int i = 0; i < 3; i++) {
                 try {
-                    String request = socket.recvString();
+                    String request = socket.recvString().value();
                     System.out.println("[Server] Received encrypted: " + request);
 
                     String response = "Secure response #" + (i + 1);
@@ -176,7 +176,7 @@ public class CurveSecuritySample {
                 System.out.println("[Client] Sent encrypted: " + request);
 
                 try {
-                    String response = socket.recvString();
+                    String response = socket.recvString().value();
                     System.out.println("[Client] Received encrypted: " + response);
                 } catch (ZmqException ex) {
                     if (ex.isAgain()) {

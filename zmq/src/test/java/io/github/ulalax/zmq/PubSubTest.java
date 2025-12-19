@@ -43,7 +43,7 @@ class PubSubTest {
 
                 // Then: Subscriber should receive the message
                 sub.setOption(SocketOption.RCVTIMEO, 1000);
-                byte[] received = sub.recvBytes();
+                byte[] received = sub.recvBytes().value();
 
                 assertThat(received).isNotNull();
                 assertThat(new String(received, StandardCharsets.UTF_8))
@@ -80,7 +80,7 @@ class PubSubTest {
                 pub.send("news.sports Hello");
 
                 // Then: Should receive the news message
-                byte[] received = sub.recvBytes();
+                byte[] received = sub.recvBytes().value();
                 assertThat(received).isNotNull();
                 assertThat(new String(received, StandardCharsets.UTF_8))
                         .as("Received news message")
@@ -91,10 +91,10 @@ class PubSubTest {
 
                 // Then: Should not receive the weather message (timeout)
                 byte[] buffer = new byte[256];
-                int bytesReceived = sub.tryRecv(buffer, RecvFlags.NONE);
-                assertThat(bytesReceived)
+                RecvResult<Integer> bytesReceived = sub.recv(buffer, RecvFlags.DONT_WAIT);
+                assertThat(bytesReceived.wouldBlock())
                         .as("Filtered message should not be received")
-                        .isEqualTo(-1);
+                        .isTrue();
             }
         }
     }
@@ -131,8 +131,8 @@ class PubSubTest {
                 pub.send(message);
 
                 // Then: Both subscribers should receive the message
-                byte[] received1 = sub1.recvBytes();
-                byte[] received2 = sub2.recvBytes();
+                byte[] received1 = sub1.recvBytes().value();
+                byte[] received2 = sub2.recvBytes().value();
 
                 assertThat(received1).isNotNull();
                 assertThat(received2).isNotNull();

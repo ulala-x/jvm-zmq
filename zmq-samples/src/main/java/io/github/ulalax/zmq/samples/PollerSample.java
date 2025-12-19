@@ -92,14 +92,14 @@ public class PollerSample {
 
                 // Check receiver 1
                 if (poller.isReadable(idx1)) {
-                    String msg = receiver1.recvString();
+                    String msg = receiver1.recvString().value();
                     System.out.println("[Receiver-1] " + msg);
                     totalMessages++;
                 }
 
                 // Check receiver 2
                 if (poller.isReadable(idx2)) {
-                    String msg = receiver2.recvString();
+                    String msg = receiver2.recvString().value();
                     System.out.println("[Receiver-2] " + msg);
                     totalMessages++;
                 }
