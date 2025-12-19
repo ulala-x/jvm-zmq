@@ -144,14 +144,14 @@ def process_benchmark_type(data, benchmark_type):
     print("| Method                   | MessageSize | MessageCount | Score (ops/s) | Mean       | Error       | StdDev    | Ratio | RatioSD | Latency   | Messages/sec | Data Throughput | Gen0      | Allocated    | Alloc Ratio |")
     print("|------------------------- |------------ |------------- |--------------:|-----------:|------------:|----------:|------:|--------:|----------:|-------------:|----------------:|----------:|-------------:|------------:|")
 
-    # Print results grouped by message size
-    if benchmark_type == 'memory':
-        method_order = ['ByteArray_SendRecv', 'ArrayPool_SendRecv', 'Message_SendRecv', 'MessageZeroCopy_SendRecv']
-    elif benchmark_type == 'receive':
-        method_order = ['BLOCKING', 'NON_BLOCKING', 'POLLER']
+    # Auto-detect methods from results
+    all_methods = sorted(set(k[1] for k in results.keys()))
+
+    # Put baseline first, then others in sorted order
+    if baseline_name and baseline_name in all_methods:
+        method_order = [baseline_name] + [m for m in all_methods if m != baseline_name]
     else:
-        # Auto-detect from results
-        method_order = sorted(set(k[1] for k in results.keys()))
+        method_order = all_methods
 
     for size_idx, size in enumerate(msg_sizes):
         baseline = baselines.get(size)

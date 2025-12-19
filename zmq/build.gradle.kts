@@ -44,8 +44,9 @@ jmh {
     resultsFile.set(project.file("${project.layout.buildDirectory.get()}/reports/jmh/results.json"))
     resultFormat.set("JSON")
 
-    // Include patterns
-    includes.add(".*Benchmark.*")
+    // Include patterns - support runtime override via -PjmhIncludes
+    val jmhIncludesPattern = project.findProperty("jmhIncludes") as String? ?: ".*Benchmark.*"
+    includes.add(jmhIncludesPattern)
 
     // JVM arguments for FFM native access
     jvmArgs.add("--enable-native-access=ALL-UNNAMED")
@@ -79,7 +80,7 @@ tasks.register("formatJmhResults") {
 
         // Group by message size and sort
         val groupedBySize = json.groupBy {
-            (it["params"] as Map<String, String>)["messageSize"]
+            (it["params"] as? Map<String, String>)?.get("messageSize")
         }
 
         // Data class to hold benchmark metrics for each message size
@@ -101,8 +102,8 @@ tasks.register("formatJmhResults") {
                 val metric = result["primaryMetric"] as Map<String, Any>
                 val score = (metric["score"] as Number).toDouble()
                 val error = (metric["scoreError"] as Number).toDouble()
-                val params = result["params"] as Map<String, String>
-                val messageCount = params["messageCount"]?.toIntOrNull() ?: 1
+                val params = result["params"] as? Map<String, String>
+                val messageCount = params?.get("messageCount")?.toIntOrNull() ?: 1
                 val sizeInt = size?.toInt() ?: 0
 
                 when (mode) {

@@ -70,7 +70,7 @@ case "$1" in
         echo "예상 시간: ~20분"
         echo ""
 
-        ./gradlew :zmq:jmh -Pjmh.includes=".*MemoryStrategyBenchmark.*"
+        ./gradlew :zmq:jmh -PjmhIncludes=".*MemoryStrategyBenchmark.*"
 
         format_results
         ;;
@@ -83,7 +83,7 @@ case "$1" in
         echo "예상 시간: ~10분"
         echo ""
 
-        ./gradlew :zmq:jmh -Pjmh.includes=".*ReceiveModeBenchmark.*"
+        ./gradlew :zmq:jmh -PjmhIncludes=".*ReceiveModeBenchmark.*"
 
         format_results
         ;;
