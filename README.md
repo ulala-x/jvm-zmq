@@ -1,3 +1,6 @@
+[![English](https://img.shields.io/badge/lang-en-red.svg)](README.md)
+[![한국어](https://img.shields.io/badge/lang-한국어-green.svg)](README.ko.md)
+
 # JVM-ZMQ
 
 [![CI - Build and Test](https://github.com/ulala-x/jvm-zmq/actions/workflows/ci.yml/badge.svg)](https://github.com/ulala-x/jvm-zmq/actions/workflows/ci.yml)
