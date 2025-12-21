@@ -5,6 +5,7 @@ Matches the format from Net.Zmq.Benchmarks-report-github.md
 """
 import json
 import sys
+import os
 
 def format_size(bytes_val):
     """Format bytes to human readable size"""
@@ -41,6 +42,15 @@ def format_messages_per_sec(count):
         return f"{count/1e3:.2f}K"
     else:
         return f"{count:.2f}"
+
+def format_number_compact(num):
+    """Format large numbers in compact form: 3.07M, 908.96K, etc."""
+    if num >= 1e6:
+        return f"{num/1e6:.2f}M"
+    elif num >= 1e3:
+        return f"{num/1e3:.2f}K"
+    else:
+        return f"{num:.2f}"
 
 def process_benchmark_type(data, benchmark_type):
     """Process and display results for a specific benchmark type"""
@@ -140,10 +150,6 @@ def process_benchmark_type(data, benchmark_type):
     else:
         print("\n## Receive Mode Benchmarks\n")
 
-    # Print table header
-    print("| Method                   | MessageSize | MessageCount | Score (ops/s) | Mean       | Error       | StdDev    | Ratio | RatioSD | Latency   | Messages/sec | Data Throughput | Gen0      | Allocated    | Alloc Ratio |")
-    print("|------------------------- |------------ |------------- |--------------:|-----------:|------------:|----------:|------:|--------:|----------:|-------------:|----------------:|----------:|-------------:|------------:|")
-
     # Auto-detect methods from results
     all_methods = sorted(set(k[1] for k in results.keys()))
 
@@ -152,6 +158,14 @@ def process_benchmark_type(data, benchmark_type):
         method_order = [baseline_name] + [m for m in all_methods if m != baseline_name]
     else:
         method_order = all_methods
+
+    # ========================================
+    # Table 1: Main Performance Metrics (Compact)
+    # ========================================
+    print("### Performance Overview")
+    print()
+    print("| Method                   | Size    | Throughput | Msg/sec | Mean      | Ratio | Allocated | Alloc Ratio |")
+    print("|------------------------- |--------:|------------|--------:|----------:|------:|----------:|------------:|")
 
     for size_idx, size in enumerate(msg_sizes):
         baseline = baselines.get(size)
@@ -166,24 +180,13 @@ def process_benchmark_type(data, benchmark_type):
 
             # Calculate metrics
             mean_ms = r['mean']
-            error_ms = r['error']
-            stddev_ms = r['stddev']
 
             # Ratio to baseline
             is_baseline = (method == baseline_name) if baseline_name else False
             if baseline and not is_baseline:
                 ratio = r['mean'] / baseline['mean']
-                ratio_sd = ratio * ((r['stddev']/r['mean'])**2 + (baseline['stddev']/baseline['mean'])**2)**0.5
             else:
                 ratio = 1.0
-                ratio_sd = 0.01 if baseline else 0.00
-
-            # Latency per message
-            latency_ns = mean_ms * 1e6 / r['msg_count']
-            if latency_ns < 1000:
-                latency_str = f"{latency_ns:.2f} ns"
-            else:
-                latency_str = f"{latency_ns/1000:.2f} μs"
 
             # Messages per second
             msg_per_sec = r['msg_count'] * r['score']
@@ -192,11 +195,7 @@ def process_benchmark_type(data, benchmark_type):
             # Data throughput
             throughput_str = format_throughput(r['msg_size'], msg_per_sec)
 
-            # GC Gen0 (collections per op)
-            gen0_str = f"{r['gc_count']:.4f}" if r['gc_count'] > 0 else "-"
-
             # Allocated memory
-            allocated_kb = r['gc_alloc_norm'] / 1024
             allocated_str = format_size(r['gc_alloc_norm'])
 
             # Alloc ratio
@@ -205,19 +204,82 @@ def process_benchmark_type(data, benchmark_type):
             else:
                 alloc_ratio = 1.0
 
-            # JMH Score (ops/s)
-            score_ops = r['score']
+            # Compact size format
+            size_str = f"{size}B" if size < 1024 else f"{size//1024}KB"
 
-            # Print row
-            print(f"| {display_name:24} | {r['msg_size']:<11} | {r['msg_count']:<12} | {score_ops:>12.2f} | {mean_ms:>8.3f} ms | {error_ms:>9.4f} ms | {stddev_ms:>8.4f} ms | {ratio:>5.2f} | {ratio_sd:>6.2f} | {latency_str:>9} | {msg_per_sec_str:>12} | {throughput_str:>15} | {gen0_str:>9} | {allocated_str:>12} | {alloc_ratio:>10.3f} |")
+            # Print row (compact format)
+            print(f"| {display_name:24} | {size_str:>7} | {throughput_str:>10} | {msg_per_sec_str:>7} | {mean_ms:>7.2f} ms | {ratio:>5.2f} | {allocated_str:>9} | {alloc_ratio:>10.2f} |")
 
         # Add separator between message sizes (except after last)
         if size_idx < len(msg_sizes) - 1:
-            print("|                          |             |              |               |            |             |           |       |         |           |              |                 |           |              |             |")
+            print("|                          |         |            |         |           |       |           |             |")
 
     print()
 
-with open('zmq/build/reports/jmh/results.json', 'r') as f:
+    # ========================================
+    # Table 2: Detailed Metrics (Optional - can be toggled)
+    # ========================================
+    print("### Detailed Metrics")
+    print()
+    print("| Method                   | Size    | Score (ops/s) | Error      | StdDev    | Latency   | Gen0      |")
+    print("|------------------------- |--------:|--------------:|-----------:|----------:|----------:|----------:|")
+
+    for size_idx, size in enumerate(msg_sizes):
+        for method_idx, method in enumerate(method_order):
+            key = (size, method)
+            if key not in results:
+                continue
+
+            r = results[key]
+            display_name = method_names.get(method, method)
+
+            # Calculate metrics
+            mean_ms = r['mean']
+            error_ms = r['error']
+            stddev_ms = r['stddev']
+
+            # Latency per message
+            latency_ns = mean_ms * 1e6 / r['msg_count']
+            if latency_ns < 1000:
+                latency_str = f"{latency_ns:.2f} ns"
+            else:
+                latency_str = f"{latency_ns/1000:.2f} μs"
+
+            # GC Gen0 (collections per op)
+            gen0_str = f"{r['gc_count']:.4f}" if r['gc_count'] > 0 else "-"
+
+            # JMH Score (ops/s)
+            score_ops = r['score']
+
+            # Compact size format
+            size_str = f"{size}B" if size < 1024 else f"{size//1024}KB"
+
+            # Print row
+            print(f"| {display_name:24} | {size_str:>7} | {score_ops:>12.2f} | {error_ms:>8.4f} ms | {stddev_ms:>8.4f} ms | {latency_str:>9} | {gen0_str:>9} |")
+
+        # Add separator between message sizes (except after last)
+        if size_idx < len(msg_sizes) - 1:
+            print("|                          |         |               |            |           |           |           |")
+
+    print()
+
+# Get project root directory (2 levels up from script directory)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(script_dir))
+results_path = os.path.join(project_root, 'zmq', 'build', 'reports', 'jmh', 'results.json')
+
+# Check if file exists and is not empty
+if not os.path.exists(results_path):
+    print(f"Error: JMH results file not found at: {results_path}", file=sys.stderr)
+    print(f"Please run JMH benchmarks first using: ./gradlew jmh", file=sys.stderr)
+    sys.exit(1)
+
+if os.path.getsize(results_path) == 0:
+    print(f"Error: JMH results file is empty: {results_path}", file=sys.stderr)
+    print(f"Please run JMH benchmarks first using: ./gradlew jmh", file=sys.stderr)
+    sys.exit(1)
+
+with open(results_path, 'r') as f:
     data = json.load(f)
 
 # Print header
