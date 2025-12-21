@@ -409,7 +409,7 @@ cd jvm-zmq
 # Run tests
 ./gradlew test
 
-# Install to local Maven repository
+# Install to local Maven repository (for local development/testing)
 ./gradlew publishToMavenLocal
 ```
 
