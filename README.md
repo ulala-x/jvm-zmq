@@ -245,6 +245,8 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
 
 Results are saved to `zmq/build/reports/jmh/results.json` (JSON) and `results-formatted.txt` (human-readable).
 
+For complete benchmark analysis, implementation details, and optimization guidelines, see **[Performance Benchmarks](docs/BENCHMARKS.md)**.
+
 ## Socket Types
 
 | Type | Description |
@@ -404,8 +406,9 @@ jvm-zmq/
 
 ## Documentation
 
-- **[API Documentation](https://ulala-x.github.io/jvm-zmq/)** - Complete Javadoc API reference for all classes and methods
-- **[Sample Code](zmq-samples/)** - 13 sample applications demonstrating all ZeroMQ patterns
+- **[API Documentation](https://ulala-x.github.io/jvm-zmq/)** - Complete Javadoc API reference
+- **[Performance Benchmarks](docs/BENCHMARKS.md)** - Detailed benchmark results and analysis
+- **[Sample Code](zmq-samples/)** - 13 sample applications
 
 ## License
 
