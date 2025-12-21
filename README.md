@@ -22,7 +22,7 @@ A modern Java binding for ZeroMQ (libzmq) using JDK 22+ FFM (Foreign Function & 
 
 ```kotlin
 dependencies {
-    implementation("io.github.ulalax:zmq:1.0.0-SNAPSHOT")
+    implementation("io.github.ulalax:zmq:0.1")
 }
 ```
 
@@ -32,7 +32,7 @@ dependencies {
 <dependency>
     <groupId>io.github.ulalax</groupId>
     <artifactId>zmq</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>0.1</version>
 </dependency>
 ```
 
@@ -188,40 +188,46 @@ try (Context ctx = new Context();
 
 ## Performance
 
-Benchmark results on Router-to-Router pattern (10,000 messages per iteration):
+Performance benchmarks on Router-to-Router pattern (Ubuntu 24.04 LTS, JDK 22.0.2, 10,000 messages per iteration):
 
 ### Memory Strategy Performance
 
-Different memory strategies show varying performance characteristics depending on message size:
+**Small Messages (64 bytes):**
+- **ByteArray**: 2.67M msg/sec (1.37 Gbps) - **Best for small messages**
+- ArrayPool: 1.93M msg/sec (988 Mbps, 26% allocation vs ByteArray)
+- Message: 1.26M msg/sec (644 Mbps)
+- ❌ MessageZeroCopy: 29K msg/sec (severe degradation)
 
-| Message Size | ByteArray | ArrayPool | Message | MessageZeroCopy |
-|--------------|-----------|-----------|---------|-----------------|
-| **64 B** | **3.71M msg/sec** | 1.83M msg/sec | 1.15M msg/sec | 26K msg/sec |
-| **1,500 B** | 835K msg/sec | 842K msg/sec | **861K msg/sec** | 24K msg/sec |
-| **65,536 B** | 89K msg/sec | **91K msg/sec** | 70K msg/sec | 16K msg/sec |
+**Medium Messages (1,500 bytes):**
+- **Message**: 967K msg/sec (11.6 Gbps) - **Best for medium messages**
+- ArrayPool: 921K msg/sec (11.0 Gbps, 2% allocation vs ByteArray)
+- ByteArray: 911K msg/sec (10.9 Gbps)
+- ❌ MessageZeroCopy: 26K msg/sec
 
-**Throughput = ops/sec × 10,000 messages*
+**Large Messages (65,536 bytes):**
+- **ByteArray**: 85K msg/sec (5.55 GB/s) - **Best for large messages**
+- ArrayPool: 73K msg/sec (4.76 GB/s, <1% allocation vs ByteArray)
+- Message: 71K msg/sec (4.66 GB/s)
+- ❌ MessageZeroCopy: 17K msg/sec
 
 **Recommendations:**
-- **Small messages (< 1KB)**: Use `ByteArray` (`socket.send(byte[])`) for maximum throughput
-- **Medium messages (1-8KB)**: Use `Message` or `ByteArray` - similar performance
-- **Large messages (> 8KB)**: Use `ArrayPool` pattern to reduce GC pressure
-- **Avoid**: `MessageZeroCopy` shows severe performance degradation due to Arena allocation overhead
+- **Small messages (<1KB)**: Use `socket.send(byte[])` for maximum throughput (2.67M msg/sec @ 64B)
+- **Medium messages (1-8KB)**: Use `Message` or `ByteArray` - similar performance (~900K msg/sec)
+- **Large messages (>8KB)**: Use `ArrayPool` pattern to reduce GC pressure (73% less allocation)
+- **Avoid**: `MessageZeroCopy` - shows 90x slowdown due to Arena allocation overhead
 
 ### Receive Mode Performance
 
-Three receive strategies compared for event-driven applications:
-
 | Message Size | Blocking | Poller | NonBlocking |
 |--------------|----------|--------|-------------|
-| **64 B** | 1.45M msg/sec | 1.43M msg/sec | 1.37M msg/sec |
-| **1,500 B** | 840K msg/sec | 824K msg/sec | 764K msg/sec |
-| **65,536 B** | 71K msg/sec | 65K msg/sec | 30K msg/sec |
+| **64 B** | 1.48M msg/sec | **1.49M msg/sec** | 1.45M msg/sec |
+| **1,500 B** | 868K msg/sec | **882K msg/sec** | 761K msg/sec |
+| **65,536 B** | **69K msg/sec** | 68K msg/sec | 32K msg/sec |
 
 **Recommendations:**
 - **Single socket**: Use `Blocking` mode (`socket.recv()`) for simplest implementation
-- **Multiple sockets**: Use `Poller` for event-driven programming with ~98% of blocking performance
-- **Avoid**: `NonBlocking` with `Thread.sleep()` - not recommended for production
+- **Multiple sockets**: Use `Poller` for event-driven programming - matches blocking performance (98-102%)
+- **Avoid**: `NonBlocking` with busy-wait/sleep - not recommended for production (2x slower for large messages)
 
 ### Running Benchmarks
 
@@ -230,16 +236,14 @@ Three receive strategies compared for event-driven applications:
 ./gradlew :zmq:jmh
 
 # Run specific benchmark
-./gradlew :zmq:jmh -Pjmh.includes=MemoryStrategyBenchmark
-./gradlew :zmq:jmh -Pjmh.includes=ReceiveModeBenchmark
+./gradlew :zmq:jmh -PjmhIncludes='.*MemoryStrategyBenchmark.*'
+./gradlew :zmq:jmh -PjmhIncludes='.*ReceiveModeBenchmark.*'
 
-# Format results
-./gradlew :zmq:formatJmhResults
+# Format results in .NET BenchmarkDotNet style
+cd zmq && python3 scripts/format_jmh_dotnet_style.py
 ```
 
-Results are saved to `zmq/build/reports/jmh/results-formatted.txt`
-
-For detailed benchmark results, performance analysis, and implementation patterns, see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+Results are saved to `zmq/build/reports/jmh/results.json` (JSON) and `results-formatted.txt` (human-readable).
 
 ## Socket Types
 
@@ -515,9 +519,9 @@ For detailed migration information, see [MIGRATION.md](MIGRATION.md).
 
 ## Documentation
 
-- [API Documentation](https://ulala-x.github.io/jvm-zmq/) - Complete Javadoc API reference
-- [Performance Benchmarks](docs/BENCHMARKS.md) - Detailed benchmark results, performance analysis, and optimization guidelines
-- [Migration Guide](MIGRATION.md) - Comprehensive guide for upgrading from v1.x to v2.0
+- **[API Documentation](https://ulala-x.github.io/jvm-zmq/)** - Complete Javadoc API reference for all classes and methods
+- **[Migration Guide](MIGRATION.md)** - Comprehensive guide for upgrading from v1.x to v2.0 Result API
+- **[Sample Code](zmq-samples/)** - 13 sample applications demonstrating all ZeroMQ patterns
 
 ## License
 
@@ -526,5 +530,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Related Projects
 
 - [libzmq](https://github.com/zeromq/libzmq) - ZeroMQ core library
-- [libzmq-native](https://github.com/ulala-x/libzmq-native) - Native binaries
-- [netzmq](https://github.com/ulala-x/netzmq) - .NET ZeroMQ bindings
+- [libzmq-native](https://github.com/ulala-x/libzmq-native) - Cross-platform native binaries for Windows/Linux/macOS (x64/ARM64)
+- [net-zmq](https://github.com/ulala-x/net-zmq) - .NET 8+ ZeroMQ bindings with cppzmq-style API
