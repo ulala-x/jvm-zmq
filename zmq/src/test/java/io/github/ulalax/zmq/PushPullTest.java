@@ -32,8 +32,9 @@ class PushPullTest {
                  Socket pusher = new Socket(ctx, SocketType.PUSH);
                  Socket puller = new Socket(ctx, SocketType.PULL)) {
 
-                puller.bind("inproc://test-push-pull");
-                pusher.connect("inproc://test-push-pull");
+                puller.bind("tcp://127.0.0.1:0");
+                String endpoint = puller.getOptionString(SocketOption.LAST_ENDPOINT);
+                pusher.connect(endpoint);
                 Thread.sleep(50);
 
                 // When: Push a message
@@ -59,8 +60,9 @@ class PushPullTest {
                  Socket pusher = new Socket(ctx, SocketType.PUSH);
                  Socket puller = new Socket(ctx, SocketType.PULL)) {
 
-                puller.bind("inproc://test-sequence");
-                pusher.connect("inproc://test-sequence");
+                puller.bind("tcp://127.0.0.1:0");
+                String endpoint = puller.getOptionString(SocketOption.LAST_ENDPOINT);
+                pusher.connect(endpoint);
                 Thread.sleep(50);
 
                 puller.setOption(SocketOption.RCVTIMEO, 1000);
@@ -93,9 +95,10 @@ class PushPullTest {
                  Socket puller1 = new Socket(ctx, SocketType.PULL);
                  Socket puller2 = new Socket(ctx, SocketType.PULL)) {
 
-                pusher.bind("inproc://test-distribution");
-                puller1.connect("inproc://test-distribution");
-                puller2.connect("inproc://test-distribution");
+                pusher.bind("tcp://127.0.0.1:0");
+                String endpoint = pusher.getOptionString(SocketOption.LAST_ENDPOINT);
+                puller1.connect(endpoint);
+                puller2.connect(endpoint);
                 Thread.sleep(100);
 
                 puller1.setOption(SocketOption.RCVTIMEO, 1000);
@@ -154,9 +157,10 @@ class PushPullTest {
                  Socket pusher2 = new Socket(ctx, SocketType.PUSH);
                  Socket puller = new Socket(ctx, SocketType.PULL)) {
 
-                puller.bind("inproc://test-fanout");
-                pusher1.connect("inproc://test-fanout");
-                pusher2.connect("inproc://test-fanout");
+                puller.bind("tcp://127.0.0.1:0");
+                String endpoint = puller.getOptionString(SocketOption.LAST_ENDPOINT);
+                pusher1.connect(endpoint);
+                pusher2.connect(endpoint);
                 Thread.sleep(100);
 
                 puller.setOption(SocketOption.RCVTIMEO, 1000);
@@ -196,11 +200,13 @@ class PushPullTest {
                  Socket sink = new Socket(ctx, SocketType.PULL)) {
 
                 // Setup pipeline connections
-                producer.bind("inproc://stage1");
-                workerIn.connect("inproc://stage1");
+                producer.bind("tcp://127.0.0.1:0");
+                String endpoint1 = producer.getOptionString(SocketOption.LAST_ENDPOINT);
+                workerIn.connect(endpoint1);
 
-                workerOut.bind("inproc://stage2");
-                sink.connect("inproc://stage2");
+                workerOut.bind("tcp://127.0.0.1:0");
+                String endpoint2 = workerOut.getOptionString(SocketOption.LAST_ENDPOINT);
+                sink.connect(endpoint2);
 
                 Thread.sleep(100);
 
@@ -238,7 +244,8 @@ class PushPullTest {
             try (Context ctx = new Context();
                  Socket puller = new Socket(ctx, SocketType.PULL)) {
 
-                puller.bind("inproc://test-concurrent");
+                puller.bind("tcp://127.0.0.1:0");
+                String endpoint = puller.getOptionString(SocketOption.LAST_ENDPOINT);
                 Thread.sleep(50);
 
                 int threadCount = 3;
@@ -251,7 +258,7 @@ class PushPullTest {
                     final int threadId = t;
                     new Thread(() -> {
                         try (Socket pusher = new Socket(ctx, SocketType.PUSH)) {
-                            pusher.connect("inproc://test-concurrent");
+                            pusher.connect(endpoint);
                             Thread.sleep(50);
 
                             startLatch.await();
@@ -301,8 +308,9 @@ class PushPullTest {
                  Socket pusher = new Socket(ctx, SocketType.PUSH);
                  Socket puller = new Socket(ctx, SocketType.PULL)) {
 
-                puller.bind("inproc://test-binary-push-pull");
-                pusher.connect("inproc://test-binary-push-pull");
+                puller.bind("tcp://127.0.0.1:0");
+                String endpoint = puller.getOptionString(SocketOption.LAST_ENDPOINT);
+                pusher.connect(endpoint);
                 Thread.sleep(50);
 
                 puller.setOption(SocketOption.RCVTIMEO, 1000);
@@ -327,8 +335,9 @@ class PushPullTest {
                  Socket pusher = new Socket(ctx, SocketType.PUSH);
                  Socket puller = new Socket(ctx, SocketType.PULL)) {
 
-                puller.bind("inproc://test-large-binary");
-                pusher.connect("inproc://test-large-binary");
+                puller.bind("tcp://127.0.0.1:0");
+                String endpoint = puller.getOptionString(SocketOption.LAST_ENDPOINT);
+                pusher.connect(endpoint);
                 Thread.sleep(50);
 
                 puller.setOption(SocketOption.RCVTIMEO, 2000);
@@ -365,8 +374,9 @@ class PushPullTest {
                 // Set low high-water mark
                 pusher.setOption(SocketOption.SNDHWM, 10);
 
-                puller.bind("inproc://test-hwm");
-                pusher.connect("inproc://test-hwm");
+                puller.bind("tcp://127.0.0.1:0");
+                String endpoint = puller.getOptionString(SocketOption.LAST_ENDPOINT);
+                pusher.connect(endpoint);
                 Thread.sleep(100);
 
                 // When: Send messages up to and beyond HWM
@@ -425,8 +435,9 @@ class PushPullTest {
                  Socket pusher = new Socket(ctx, SocketType.PUSH);
                  Socket puller = new Socket(ctx, SocketType.PULL)) {
 
-                puller.bind("inproc://test-empty");
-                pusher.connect("inproc://test-empty");
+                puller.bind("tcp://127.0.0.1:0");
+                String endpoint = puller.getOptionString(SocketOption.LAST_ENDPOINT);
+                pusher.connect(endpoint);
                 Thread.sleep(50);
 
                 puller.setOption(SocketOption.RCVTIMEO, 1000);
@@ -451,13 +462,14 @@ class PushPullTest {
                  Socket pusher = new Socket(ctx, SocketType.PUSH);
                  Socket puller = new Socket(ctx, SocketType.PULL)) {
 
-                puller.bind("inproc://test-disconnect");
-                pusher.connect("inproc://test-disconnect");
+                puller.bind("tcp://127.0.0.1:0");
+                String endpoint = puller.getOptionString(SocketOption.LAST_ENDPOINT);
+                pusher.connect(endpoint);
                 Thread.sleep(50);
 
                 // When: Send a message, then disconnect
                 pusher.send("Before disconnect");
-                pusher.disconnect("inproc://test-disconnect");
+                pusher.disconnect(endpoint);
 
                 // Then: Should handle gracefully
                 puller.setOption(SocketOption.RCVTIMEO, 1000);

@@ -28,11 +28,12 @@ class PubSubTest {
                  Socket pub = new Socket(ctx, SocketType.PUB);
                  Socket sub = new Socket(ctx, SocketType.SUB)) {
 
-                pub.bind("inproc://test-pubsub");
+                pub.bind("tcp://127.0.0.1:0");
+                String endpoint = pub.getOptionString(SocketOption.LAST_ENDPOINT);
 
                 // Subscribe to all messages
                 sub.subscribe("");
-                sub.connect("inproc://test-pubsub");
+                sub.connect(endpoint);
 
                 // Give time for subscription to propagate
                 Thread.sleep(100);
@@ -65,11 +66,12 @@ class PubSubTest {
                  Socket pub = new Socket(ctx, SocketType.PUB);
                  Socket sub = new Socket(ctx, SocketType.SUB)) {
 
-                pub.bind("inproc://test-topics");
+                pub.bind("tcp://127.0.0.1:0");
+                String endpoint = pub.getOptionString(SocketOption.LAST_ENDPOINT);
 
                 // Subscribe only to "news." prefix
                 sub.subscribe("news.");
-                sub.connect("inproc://test-topics");
+                sub.connect(endpoint);
 
                 Thread.sleep(100);
 
@@ -112,14 +114,15 @@ class PubSubTest {
                  Socket sub1 = new Socket(ctx, SocketType.SUB);
                  Socket sub2 = new Socket(ctx, SocketType.SUB)) {
 
-                pub.bind("inproc://test-multi-sub");
+                pub.bind("tcp://127.0.0.1:0");
+                String endpoint = pub.getOptionString(SocketOption.LAST_ENDPOINT);
 
                 // Both subscribers subscribe to all messages
                 sub1.subscribe("");
-                sub1.connect("inproc://test-multi-sub");
+                sub1.connect(endpoint);
 
                 sub2.subscribe("");
-                sub2.connect("inproc://test-multi-sub");
+                sub2.connect(endpoint);
 
                 Thread.sleep(100);
 

@@ -48,7 +48,7 @@ public class MemoryStrategyBenchmark {
         volatile boolean receiverError = false;
         volatile Exception receiverException;
 
-        @Param({"64", "1500", "65536"})
+        @Param({"64", "512","1024", "65536"})
         int messageSize;
 
         @Param({"10000"})

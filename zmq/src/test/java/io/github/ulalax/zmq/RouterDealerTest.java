@@ -28,8 +28,9 @@ class RouterDealerTest {
                  Socket router = new Socket(ctx, SocketType.ROUTER);
                  Socket dealer = new Socket(ctx, SocketType.DEALER)) {
 
-                router.bind("inproc://test-router-dealer");
-                dealer.connect("inproc://test-router-dealer");
+                router.bind("tcp://127.0.0.1:0");
+                String endpoint = router.getOptionString(SocketOption.LAST_ENDPOINT);
+                dealer.connect(endpoint);
                 Thread.sleep(50);
 
                 router.setOption(SocketOption.RCVTIMEO, 1000);
@@ -66,8 +67,9 @@ class RouterDealerTest {
                  Socket router = new Socket(ctx, SocketType.ROUTER);
                  Socket dealer = new Socket(ctx, SocketType.DEALER)) {
 
-                router.bind("inproc://test-router-reply");
-                dealer.connect("inproc://test-router-reply");
+                router.bind("tcp://127.0.0.1:0");
+                String endpoint = router.getOptionString(SocketOption.LAST_ENDPOINT);
+                dealer.connect(endpoint);
                 Thread.sleep(50);
 
                 router.setOption(SocketOption.RCVTIMEO, 1000);
@@ -117,9 +119,10 @@ class RouterDealerTest {
                  Socket dealer1 = new Socket(ctx, SocketType.DEALER);
                  Socket dealer2 = new Socket(ctx, SocketType.DEALER)) {
 
-                router.bind("inproc://test-multi-dealers");
-                dealer1.connect("inproc://test-multi-dealers");
-                dealer2.connect("inproc://test-multi-dealers");
+                router.bind("tcp://127.0.0.1:0");
+                String endpoint = router.getOptionString(SocketOption.LAST_ENDPOINT);
+                dealer1.connect(endpoint);
+                dealer2.connect(endpoint);
                 Thread.sleep(100);
 
                 router.setOption(SocketOption.RCVTIMEO, 1000);
@@ -171,14 +174,15 @@ class RouterDealerTest {
                  Socket dealer1 = new Socket(ctx, SocketType.DEALER);
                  Socket dealer2 = new Socket(ctx, SocketType.DEALER)) {
 
-                router.bind("inproc://test-route-correct");
+                router.bind("tcp://127.0.0.1:0");
+                String endpoint = router.getOptionString(SocketOption.LAST_ENDPOINT);
 
                 // Set custom identities
                 dealer1.setOption(SocketOption.ROUTING_ID, "DEALER1");
                 dealer2.setOption(SocketOption.ROUTING_ID, "DEALER2");
 
-                dealer1.connect("inproc://test-route-correct");
-                dealer2.connect("inproc://test-route-correct");
+                dealer1.connect(endpoint);
+                dealer2.connect(endpoint);
                 Thread.sleep(100);
 
                 router.setOption(SocketOption.RCVTIMEO, 1000);
@@ -237,9 +241,10 @@ class RouterDealerTest {
                  Socket worker1 = new Socket(ctx, SocketType.ROUTER);
                  Socket worker2 = new Socket(ctx, SocketType.ROUTER)) {
 
-                client.bind("inproc://test-load-balance");
-                worker1.connect("inproc://test-load-balance");
-                worker2.connect("inproc://test-load-balance");
+                client.bind("tcp://127.0.0.1:0");
+                String endpoint = client.getOptionString(SocketOption.LAST_ENDPOINT);
+                worker1.connect(endpoint);
+                worker2.connect(endpoint);
                 Thread.sleep(100);
 
                 worker1.setOption(SocketOption.RCVTIMEO, 1000);
@@ -308,11 +313,13 @@ class RouterDealerTest {
                  Socket broker = new Socket(ctx, SocketType.ROUTER);
                  Socket worker = new Socket(ctx, SocketType.DEALER)) {
 
-                broker.bind("inproc://test-async-frontend");
-                broker.bind("inproc://test-async-backend");
+                broker.bind("tcp://127.0.0.1:0");
+                String frontendEndpoint = broker.getOptionString(SocketOption.LAST_ENDPOINT);
+                broker.bind("tcp://127.0.0.1:0");
+                String backendEndpoint = broker.getOptionString(SocketOption.LAST_ENDPOINT);
 
-                client.connect("inproc://test-async-frontend");
-                worker.connect("inproc://test-async-backend");
+                client.connect(frontendEndpoint);
+                worker.connect(backendEndpoint);
 
                 Thread.sleep(100);
 
@@ -386,12 +393,13 @@ class RouterDealerTest {
                  Socket router = new Socket(ctx, SocketType.ROUTER);
                  Socket dealer = new Socket(ctx, SocketType.DEALER)) {
 
-                router.bind("inproc://test-custom-identity");
+                router.bind("tcp://127.0.0.1:0");
+                String endpoint = router.getOptionString(SocketOption.LAST_ENDPOINT);
 
                 // When: Set custom identity before connecting
                 String customId = "MyCustomDealer";
                 dealer.setOption(SocketOption.ROUTING_ID, customId);
-                dealer.connect("inproc://test-custom-identity");
+                dealer.connect(endpoint);
                 Thread.sleep(50);
 
                 router.setOption(SocketOption.RCVTIMEO, 1000);
@@ -421,12 +429,13 @@ class RouterDealerTest {
                  Socket router = new Socket(ctx, SocketType.ROUTER);
                  Socket dealer = new Socket(ctx, SocketType.DEALER)) {
 
-                router.bind("inproc://test-get-routing-id");
+                router.bind("tcp://127.0.0.1:0");
+                String endpoint = router.getOptionString(SocketOption.LAST_ENDPOINT);
 
                 // When: Set routing ID before connecting
                 String expectedId = "TestIdentity";
                 dealer.setOption(SocketOption.ROUTING_ID, expectedId);
-                dealer.connect("inproc://test-get-routing-id");
+                dealer.connect(endpoint);
 
                 // Then: Should retrieve the same ID after connection
                 String actualId = dealer.getOptionString(SocketOption.ROUTING_ID);
@@ -449,8 +458,9 @@ class RouterDealerTest {
                  Socket router = new Socket(ctx, SocketType.ROUTER);
                  Socket dealer = new Socket(ctx, SocketType.DEALER)) {
 
-                router.bind("inproc://test-multipart-rd");
-                dealer.connect("inproc://test-multipart-rd");
+                router.bind("tcp://127.0.0.1:0");
+                String endpoint = router.getOptionString(SocketOption.LAST_ENDPOINT);
+                dealer.connect(endpoint);
                 Thread.sleep(50);
 
                 router.setOption(SocketOption.RCVTIMEO, 1000);
@@ -494,7 +504,7 @@ class RouterDealerTest {
             try (Context ctx = new Context();
                  Socket router = new Socket(ctx, SocketType.ROUTER)) {
 
-                router.bind("inproc://test-missing-identity");
+                router.bind("tcp://127.0.0.1:0");
 
                 // When: Try to send without identity frame
                 // Then: ROUTER enforces identity requirement at protocol level
@@ -517,13 +527,14 @@ class RouterDealerTest {
                  Socket router = new Socket(ctx, SocketType.ROUTER);
                  Socket dealer = new Socket(ctx, SocketType.DEALER)) {
 
-                router.bind("inproc://test-disconnect-dealer");
-                dealer.connect("inproc://test-disconnect-dealer");
+                router.bind("tcp://127.0.0.1:0");
+                String endpoint = router.getOptionString(SocketOption.LAST_ENDPOINT);
+                dealer.connect(endpoint);
                 Thread.sleep(50);
 
                 // When: DEALER sends message then disconnects
                 dealer.send("Before disconnect");
-                dealer.disconnect("inproc://test-disconnect-dealer");
+                dealer.disconnect(endpoint);
 
                 // Then: ROUTER should still receive the message
                 router.setOption(SocketOption.RCVTIMEO, 1000);

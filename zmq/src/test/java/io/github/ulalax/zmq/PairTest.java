@@ -28,8 +28,9 @@ class PairTest {
                  Socket socket1 = new Socket(ctx, SocketType.PAIR);
                  Socket socket2 = new Socket(ctx, SocketType.PAIR)) {
 
-                socket1.bind("inproc://test-pair");
-                socket2.connect("inproc://test-pair");
+                socket1.bind("tcp://127.0.0.1:0");
+                String endpoint = socket1.getOptionString(SocketOption.LAST_ENDPOINT);
+                socket2.connect(endpoint);
                 Thread.sleep(50);
 
                 socket1.setOption(SocketOption.RCVTIMEO, 1000);
@@ -65,8 +66,9 @@ class PairTest {
                  Socket socket1 = new Socket(ctx, SocketType.PAIR);
                  Socket socket2 = new Socket(ctx, SocketType.PAIR)) {
 
-                socket1.bind("inproc://test-duplex");
-                socket2.connect("inproc://test-duplex");
+                socket1.bind("tcp://127.0.0.1:0");
+                String endpoint = socket1.getOptionString(SocketOption.LAST_ENDPOINT);
+                socket2.connect(endpoint);
                 Thread.sleep(50);
 
                 socket1.setOption(SocketOption.RCVTIMEO, 1000);
@@ -104,8 +106,9 @@ class PairTest {
                  Socket socket1 = new Socket(ctx, SocketType.PAIR);
                  Socket socket2 = new Socket(ctx, SocketType.PAIR)) {
 
-                socket1.bind("inproc://test-exclusive");
-                socket2.connect("inproc://test-exclusive");
+                socket1.bind("tcp://127.0.0.1:0");
+                String endpoint = socket1.getOptionString(SocketOption.LAST_ENDPOINT);
+                socket2.connect(endpoint);
                 Thread.sleep(50);
 
                 socket1.setOption(SocketOption.RCVTIMEO, 1000);
@@ -139,8 +142,9 @@ class PairTest {
                  Socket sender = new Socket(ctx, SocketType.PAIR);
                  Socket receiver = new Socket(ctx, SocketType.PAIR)) {
 
-                receiver.bind("inproc://test-order");
-                sender.connect("inproc://test-order");
+                receiver.bind("tcp://127.0.0.1:0");
+                String endpoint = receiver.getOptionString(SocketOption.LAST_ENDPOINT);
+                sender.connect(endpoint);
                 Thread.sleep(50);
 
                 receiver.setOption(SocketOption.RCVTIMEO, 1000);
@@ -169,8 +173,9 @@ class PairTest {
                  Socket sender = new Socket(ctx, SocketType.PAIR);
                  Socket receiver = new Socket(ctx, SocketType.PAIR)) {
 
-                receiver.bind("inproc://test-rapid");
-                sender.connect("inproc://test-rapid");
+                receiver.bind("tcp://127.0.0.1:0");
+                String endpoint = receiver.getOptionString(SocketOption.LAST_ENDPOINT);
+                sender.connect(endpoint);
                 Thread.sleep(50);
 
                 receiver.setOption(SocketOption.RCVTIMEO, 2000);
@@ -205,8 +210,9 @@ class PairTest {
                  Socket socket1 = new Socket(ctx, SocketType.PAIR);
                  Socket socket2 = new Socket(ctx, SocketType.PAIR)) {
 
-                socket1.bind("inproc://test-binary");
-                socket2.connect("inproc://test-binary");
+                socket1.bind("tcp://127.0.0.1:0");
+                String endpoint = socket1.getOptionString(SocketOption.LAST_ENDPOINT);
+                socket2.connect(endpoint);
                 Thread.sleep(50);
 
                 socket2.setOption(SocketOption.RCVTIMEO, 1000);
@@ -234,8 +240,9 @@ class PairTest {
                  Socket socket1 = new Socket(ctx, SocketType.PAIR);
                  Socket socket2 = new Socket(ctx, SocketType.PAIR)) {
 
-                socket1.bind("inproc://test-large");
-                socket2.connect("inproc://test-large");
+                socket1.bind("tcp://127.0.0.1:0");
+                String endpoint = socket1.getOptionString(SocketOption.LAST_ENDPOINT);
+                socket2.connect(endpoint);
                 Thread.sleep(50);
 
                 socket2.setOption(SocketOption.RCVTIMEO, 2000);
@@ -271,8 +278,9 @@ class PairTest {
                  Socket sender = new Socket(ctx, SocketType.PAIR);
                  Socket receiver = new Socket(ctx, SocketType.PAIR)) {
 
-                receiver.bind("inproc://test-multipart");
-                sender.connect("inproc://test-multipart");
+                receiver.bind("tcp://127.0.0.1:0");
+                String endpoint = receiver.getOptionString(SocketOption.LAST_ENDPOINT);
+                sender.connect(endpoint);
                 Thread.sleep(50);
 
                 receiver.setOption(SocketOption.RCVTIMEO, 1000);
@@ -320,9 +328,10 @@ class PairTest {
                  Socket socket1 = new Socket(ctx, SocketType.PAIR);
                  Socket socket2 = new Socket(ctx, SocketType.PAIR)) {
 
-                socket1.bind("inproc://test-bind-first");
+                socket1.bind("tcp://127.0.0.1:0");
                 Thread.sleep(20);
-                socket2.connect("inproc://test-bind-first");
+                String endpoint = socket1.getOptionString(SocketOption.LAST_ENDPOINT);
+                socket2.connect(endpoint);
                 Thread.sleep(50);
 
                 socket2.setOption(SocketOption.RCVTIMEO, 1000);
@@ -344,9 +353,9 @@ class PairTest {
                  Socket socket1 = new Socket(ctx, SocketType.PAIR);
                  Socket socket2 = new Socket(ctx, SocketType.PAIR)) {
 
-                socket2.connect("inproc://test-connect-first");
+                socket2.connect("tcp://127.0.0.1:25555");
                 Thread.sleep(20);
-                socket1.bind("inproc://test-connect-first");
+                socket1.bind("tcp://127.0.0.1:25555");
                 Thread.sleep(50);
 
                 socket2.setOption(SocketOption.RCVTIMEO, 1000);
@@ -373,8 +382,9 @@ class PairTest {
                  Socket socket1 = new Socket(ctx, SocketType.PAIR);
                  Socket socket2 = new Socket(ctx, SocketType.PAIR)) {
 
-                socket1.bind("inproc://test-empty");
-                socket2.connect("inproc://test-empty");
+                socket1.bind("tcp://127.0.0.1:0");
+                String endpoint = socket1.getOptionString(SocketOption.LAST_ENDPOINT);
+                socket2.connect(endpoint);
                 Thread.sleep(50);
 
                 socket2.setOption(SocketOption.RCVTIMEO, 1000);
@@ -399,8 +409,9 @@ class PairTest {
                  Socket socket1 = new Socket(ctx, SocketType.PAIR);
                  Socket socket2 = new Socket(ctx, SocketType.PAIR)) {
 
-                socket1.bind("inproc://test-special");
-                socket2.connect("inproc://test-special");
+                socket1.bind("tcp://127.0.0.1:0");
+                String endpoint = socket1.getOptionString(SocketOption.LAST_ENDPOINT);
+                socket2.connect(endpoint);
                 Thread.sleep(50);
 
                 socket2.setOption(SocketOption.RCVTIMEO, 1000);
@@ -425,7 +436,7 @@ class PairTest {
             try (Context ctx = new Context();
                  Socket socket = new Socket(ctx, SocketType.PAIR)) {
 
-                socket.bind("inproc://test-timeout");
+                socket.bind("tcp://127.0.0.1:0");
                 socket.setOption(SocketOption.RCVTIMEO, 100);
 
                 // When: Try to receive with no data
@@ -452,20 +463,21 @@ class PairTest {
                  Socket socket1 = new Socket(ctx, SocketType.PAIR);
                  Socket socket2 = new Socket(ctx, SocketType.PAIR)) {
 
-                socket1.bind("inproc://test-inproc-transport");
-                socket2.connect("inproc://test-inproc-transport");
+                socket1.bind("tcp://127.0.0.1:0");
+                String endpoint = socket1.getOptionString(SocketOption.LAST_ENDPOINT);
+                socket2.connect(endpoint);
                 Thread.sleep(50);
 
                 socket2.setOption(SocketOption.RCVTIMEO, 1000);
 
                 // When: Exchange messages
-                socket1.send("inproc test");
+                socket1.send("tcp test");
                 byte[] received = socket2.recvBytes().value();
 
                 // Then: Should work correctly
                 assertThat(received).isNotNull();
                 assertThat(new String(received, StandardCharsets.UTF_8))
-                        .isEqualTo("inproc test");
+                        .isEqualTo("tcp test");
             }
         }
 

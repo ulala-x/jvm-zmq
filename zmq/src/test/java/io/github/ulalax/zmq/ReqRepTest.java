@@ -28,8 +28,9 @@ class ReqRepTest {
                  Socket server = new Socket(ctx, SocketType.REP);
                  Socket client = new Socket(ctx, SocketType.REQ)) {
 
-                server.bind("inproc://test-reqrep");
-                client.connect("inproc://test-reqrep");
+                server.bind("tcp://127.0.0.1:0");
+                String endpoint = server.getOptionString(SocketOption.LAST_ENDPOINT);
+                client.connect(endpoint);
 
                 // Give time for connection
                 Thread.sleep(50);
@@ -66,8 +67,9 @@ class ReqRepTest {
                  Socket server = new Socket(ctx, SocketType.REP);
                  Socket client = new Socket(ctx, SocketType.REQ)) {
 
-                server.bind("inproc://test-multi");
-                client.connect("inproc://test-multi");
+                server.bind("tcp://127.0.0.1:0");
+                String endpoint = server.getOptionString(SocketOption.LAST_ENDPOINT);
+                client.connect(endpoint);
                 Thread.sleep(50);
 
                 // When: Perform multiple exchanges
@@ -105,8 +107,9 @@ class ReqRepTest {
                  Socket server = new Socket(ctx, SocketType.REP);
                  Socket client = new Socket(ctx, SocketType.REQ)) {
 
-                server.bind("inproc://test-binary");
-                client.connect("inproc://test-binary");
+                server.bind("tcp://127.0.0.1:0");
+                String endpoint = server.getOptionString(SocketOption.LAST_ENDPOINT);
+                client.connect(endpoint);
                 Thread.sleep(50);
 
                 // When: Send binary data with all byte values (0-255)

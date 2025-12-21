@@ -21,39 +21,49 @@ Comparison of four memory management strategies for sending/receiving messages.
 
 | Method                   | Size    | Throughput | Msg/sec | Mean      | Ratio | Allocated | Alloc Ratio |
 |------------------------- |--------:|------------|--------:|----------:|------:|----------:|------------:|
-| ByteArray_SendRecv       |     64B |  1.37 Gbps |   2.67M |    3.75 ms |  1.00 |   1.83 MB |       1.00 |
-| ArrayPool_SendRecv       |     64B | 987.87 Mbps |   1.93M |    5.18 ms |  1.38 | 490.90 KB |       0.26 |
-| MessageZeroCopy_SendRecv |     64B | 15.02 Mbps |  29.34K |  340.83 ms | 90.92 |  11.00 MB |       6.00 |
-| Message_SendRecv         |     64B | 643.56 Mbps |   1.26M |    7.96 ms |  2.12 |   7.71 MB |       4.21 |
+| ByteArray_SendRecv       |     64B |  1.51 Gbps |   2.94M |    3.40 ms |  1.00 |   1.83 MB |       1.00 |
+| ArrayPool_SendRecv       |     64B | 922.62 Mbps |   1.80M |    5.55 ms |  1.63 | 490.97 KB |       0.26 |
+| MessageZeroCopy_SendRecv |     64B | 14.13 Mbps |  27.59K |  362.46 ms | 106.69 |  11.00 MB |       6.00 |
+| Message_SendRecv         |     64B | 614.22 Mbps |   1.20M |    8.34 ms |  2.45 |   7.71 MB |       4.21 |
 |                          |         |            |         |           |       |           |             |
-| ByteArray_SendRecv       |     1KB | 10.93 Gbps | 910.61K |   10.98 ms |  1.00 |  29.46 MB |       1.00 |
-| ArrayPool_SendRecv       |     1KB | 11.05 Gbps | 921.11K |   10.86 ms |  0.99 | 653.10 KB |       0.02 |
-| MessageZeroCopy_SendRecv |     1KB | 307.15 Mbps |  25.60K |  390.69 ms | 35.58 |  11.18 MB |       0.38 |
-| Message_SendRecv         |     1KB | 11.60 Gbps | 967.02K |   10.34 ms |  0.94 |   7.71 MB |       0.26 |
+| ByteArray_SendRecv       |    512B |  6.55 Gbps |   1.60M |    6.26 ms |  1.00 |  10.53 MB |       1.00 |
+| ArrayPool_SendRecv       |    512B |  6.19 Gbps |   1.51M |    6.62 ms |  1.06 | 649.20 KB |       0.06 |
+| MessageZeroCopy_SendRecv |    512B | 104.48 Mbps |  25.51K |  392.05 ms | 62.66 |  11.14 MB |       1.06 |
+| Message_SendRecv         |    512B |  4.31 Gbps |   1.05M |    9.50 ms |  1.52 |   7.71 MB |       0.73 |
 |                          |         |            |         |           |       |           |             |
-| ByteArray_SendRecv       |    64KB |  5.55 GB/s |  84.73K |  118.02 ms |  1.00 |   1.22 GB |       1.00 |
-| ArrayPool_SendRecv       |    64KB |  4.76 GB/s |  72.56K |  137.82 ms |  1.17 | 696.43 KB |       0.00 |
-| MessageZeroCopy_SendRecv |    64KB |  1.14 GB/s |  17.46K |  572.76 ms |  4.85 |  11.63 MB |       0.01 |
-| Message_SendRecv         |    64KB |  4.66 GB/s |  71.12K |  140.61 ms |  1.19 |   7.79 MB |       0.01 |
+| ByteArray_SendRecv       |     1KB |  9.47 Gbps |   1.16M |    8.65 ms |  1.00 |  20.30 MB |       1.00 |
+| ArrayPool_SendRecv       |     1KB |  8.94 Gbps |   1.09M |    9.16 ms |  1.06 | 651.25 KB |       0.03 |
+| MessageZeroCopy_SendRecv |     1KB | 204.37 Mbps |  24.95K |  400.83 ms | 46.35 |  11.25 MB |       0.55 |
+| Message_SendRecv         |     1KB |  8.69 Gbps |   1.06M |    9.43 ms |  1.09 |   7.71 MB |       0.38 |
+|                          |         |            |         |           |       |           |             |
+| ByteArray_SendRecv       |    64KB |  5.19 GB/s |  79.13K |  126.37 ms |  1.00 |   1.22 GB |       1.00 |
+| ArrayPool_SendRecv       |    64KB |  5.26 GB/s |  80.32K |  124.50 ms |  0.99 | 698.09 KB |       0.00 |
+| MessageZeroCopy_SendRecv |    64KB |  1.16 GB/s |  17.74K |  563.85 ms |  4.46 |  11.71 MB |       0.01 |
+| Message_SendRecv         |    64KB |  5.17 GB/s |  78.94K |  126.68 ms |  1.00 |   7.79 MB |       0.01 |
 
 ### Detailed Metrics
 
 | Method                   | Size    | Score (ops/s) | Error      | StdDev    | Latency   | Gen0      |
 |------------------------- |--------:|--------------:|-----------:|----------:|----------:|----------:|
-| ByteArray_SendRecv       |     64B |       266.77 |   0.3339 ms |   0.0776 ms | 374.86 ns |   46.0000 |
-| ArrayPool_SendRecv       |     64B |       192.94 |   0.2643 ms |   0.0614 ms | 518.29 ns |   33.0000 |
-| MessageZeroCopy_SendRecv |     64B |         2.93 |  19.2949 ms |   4.4818 ms |  34.08 μs |    1.0000 |
-| Message_SendRecv         |     64B |       125.70 |   0.4513 ms |   0.1048 ms | 795.58 ns |   49.0000 |
+| ByteArray_SendRecv       |     64B |       294.36 |   0.1038 ms |   0.0241 ms | 339.72 ns |   50.0000 |
+| ArrayPool_SendRecv       |     64B |       180.20 |   0.2714 ms |   0.0630 ms | 554.94 ns |   30.0000 |
+| MessageZeroCopy_SendRecv |     64B |         2.76 |  13.1408 ms |   3.0523 ms |  36.25 μs |    1.0000 |
+| Message_SendRecv         |     64B |       119.97 |   0.0909 ms |   0.0211 ms | 833.57 ns |   46.0000 |
 |                          |         |               |            |           |           |           |
-| ByteArray_SendRecv       |     1KB |        91.06 |   1.2963 ms |   0.3011 ms |   1.10 μs |  118.0000 |
-| ArrayPool_SendRecv       |     1KB |        92.11 |   0.4259 ms |   0.0989 ms |   1.09 μs |   14.0000 |
-| MessageZeroCopy_SendRecv |     1KB |         2.56 |  51.3251 ms |  11.9218 ms |  39.07 μs |    1.0000 |
-| Message_SendRecv         |     1KB |        96.70 |   0.6075 ms |   0.1411 ms |   1.03 μs |   37.0000 |
+| ByteArray_SendRecv       |    512B |       159.82 |   0.0851 ms |   0.0198 ms | 625.69 ns |   88.0000 |
+| ArrayPool_SendRecv       |    512B |       151.01 |   0.0596 ms |   0.0139 ms | 662.23 ns |   26.0000 |
+| MessageZeroCopy_SendRecv |    512B |         2.55 |  20.7017 ms |   4.8086 ms |  39.20 μs |    1.0000 |
+| Message_SendRecv         |    512B |       105.31 |   0.1804 ms |   0.0419 ms | 949.58 ns |   40.0000 |
 |                          |         |               |            |           |           |           |
-| ByteArray_SendRecv       |    64KB |         8.47 |  18.2434 ms |   4.2376 ms |  11.80 μs |  276.0000 |
-| ArrayPool_SendRecv       |    64KB |         7.26 |  10.2885 ms |   2.3898 ms |  13.78 μs |    2.0000 |
-| MessageZeroCopy_SendRecv |    64KB |         1.75 |  32.6346 ms |   7.5804 ms |  57.28 μs |    1.0000 |
-| Message_SendRecv         |    64KB |         7.11 |  27.9916 ms |   6.5019 ms |  14.06 μs |    2.0000 |
+| ByteArray_SendRecv       |     1KB |       115.64 |   0.1907 ms |   0.0443 ms | 864.77 ns |  107.0000 |
+| ArrayPool_SendRecv       |     1KB |       109.13 |   0.3631 ms |   0.0843 ms | 916.32 ns |   18.0000 |
+| MessageZeroCopy_SendRecv |     1KB |         2.49 |  23.3933 ms |   5.4338 ms |  40.08 μs |    1.0000 |
+| Message_SendRecv         |     1KB |       106.04 |   0.1806 ms |   0.0420 ms | 943.08 ns |   41.0000 |
+|                          |         |               |            |           |           |           |
+| ByteArray_SendRecv       |    64KB |         7.91 |   5.0892 ms |   1.1821 ms |  12.64 μs |  223.0000 |
+| ArrayPool_SendRecv       |    64KB |         8.03 |   3.5545 ms |   0.8256 ms |  12.45 μs |    2.0000 |
+| MessageZeroCopy_SendRecv |    64KB |         1.77 |  11.7885 ms |   2.7382 ms |  56.38 μs |    1.0000 |
+| Message_SendRecv         |    64KB |         7.89 |   4.5665 ms |   1.0607 ms |  12.67 μs |    3.0000 |
 
 ### Strategy Descriptions
 
@@ -73,12 +83,13 @@ System.arraycopy(recvBuffer, 0, outputBuffer, 0, size);
 - Allocates new byte arrays for every send/receive
 - Highest GC pressure (baseline allocation = 1.0)
 - Simple implementation
-- **Best for**: Small messages where throughput is critical
+- **Best for**: Small to medium messages where throughput is critical
 
 **Performance:**
-- 64B: 2.67M msg/sec (highest)
-- 1.5KB: 911K msg/sec (competitive)
-- 64KB: 85K msg/sec (highest)
+- 64B: 2.94M msg/sec (highest)
+- 512B: 1.60M msg/sec (highest)
+- 1KB: 1.16M msg/sec (competitive)
+- 64KB: 79K msg/sec (highest)
 
 #### 2. ArrayPool_SendRecv
 ```java
@@ -104,14 +115,15 @@ try {
 
 **Characteristics:**
 - Uses Netty PooledByteBufAllocator for buffer pooling
-- Significantly reduced GC pressure (26% allocation @ 64B, 2% @ 1.5KB)
+- Significantly reduced GC pressure (6% allocation @ 512B, 3% @ 1KB)
 - Requires buffer management discipline
-- **Best for**: Large messages where GC pressure matters
+- **Best for**: Medium to large messages where GC pressure matters
 
 **Performance:**
-- 64B: 1.93M msg/sec (72% of ByteArray)
-- 1.5KB: 921K msg/sec (competitive with ByteArray)
-- 64KB: 73K msg/sec (86% of ByteArray, but 73% less allocation)
+- 64B: 1.80M msg/sec (61% of ByteArray)
+- 512B: 1.51M msg/sec (94% of ByteArray, 94% less allocation)
+- 1KB: 1.09M msg/sec (94% of ByteArray, 97% less allocation)
+- 64KB: 80K msg/sec (101% of ByteArray, >99% less allocation)
 
 #### 3. Message_SendRecv
 ```java
@@ -131,14 +143,15 @@ try (Message msg = new Message()) {
 
 **Characteristics:**
 - Uses ZMQ native message objects
-- Medium GC pressure (4.21x @ 64B, 0.26x @ 1.5KB)
+- Medium GC pressure (4.21x @ 64B, 0.73x @ 512B, 0.38x @ 1KB)
 - Direct memory access via MemorySegment
-- **Best for**: Medium messages (1-8KB)
+- **Best for**: Medium messages (512B-8KB)
 
 **Performance:**
-- 64B: 1.26M msg/sec (47% of ByteArray)
-- 1.5KB: 967K msg/sec (**highest**)
-- 64KB: 71K msg/sec (84% of ByteArray)
+- 64B: 1.20M msg/sec (41% of ByteArray)
+- 512B: 1.05M msg/sec (66% of ByteArray)
+- 1KB: 1.06M msg/sec (92% of ByteArray)
+- 64KB: 79K msg/sec (100% of ByteArray)
 
 #### 4. MessageZeroCopy_SendRecv ❌ NOT RECOMMENDED
 ```java
@@ -155,22 +168,24 @@ socket.send(payloadMsg, SendFlags.DONT_WAIT);
 
 **Characteristics:**
 - Attempts true zero-copy with Arena allocation
-- **Severe performance degradation** (90x slower @ 64B)
+- **Severe performance degradation** (107x slower @ 64B, 63x @ 512B)
 - Arena allocation overhead dominates any zero-copy benefit
 - **Avoid in production**
 
 **Performance:**
-- 64B: 29K msg/sec (1% of ByteArray) ❌
-- 1.5KB: 26K msg/sec (3% of ByteArray) ❌
-- 64KB: 17K msg/sec (20% of ByteArray) ❌
+- 64B: 27K msg/sec (0.9% of ByteArray) ❌
+- 512B: 25K msg/sec (1.6% of ByteArray) ❌
+- 1KB: 25K msg/sec (2.1% of ByteArray) ❌
+- 64KB: 18K msg/sec (22% of ByteArray) ❌
 
 ### Recommendations by Message Size
 
 | Message Size | Recommended Strategy | Throughput | Reason |
 |--------------|---------------------|------------|--------|
-| < 1 KB | **ByteArray** | 2.67M msg/sec | Highest throughput, simple implementation |
-| 1-8 KB | **Message** or **ByteArray** | ~900K msg/sec | Similar performance, choose based on API preference |
-| > 8 KB | **ArrayPool** | 73K msg/sec | 73% less GC pressure with competitive throughput |
+| < 512 B | **ByteArray** | 2.94M msg/sec | Highest throughput, simple implementation |
+| 512 B - 1 KB | **ByteArray** or **ArrayPool** | ~1.5M msg/sec | Similar performance, choose based on GC requirements |
+| 1-8 KB | **Message** or **ArrayPool** | ~1M msg/sec | Lower GC pressure with competitive throughput |
+| > 8 KB | **ArrayPool** | 80K msg/sec | >99% less GC pressure with best throughput |
 
 ## Receive Mode Benchmarks
 
@@ -180,33 +195,41 @@ Comparison of three receive strategies: Blocking, Poller, and NonBlocking.
 
 | Method                   | Size    | Throughput | Msg/sec | Mean      | Ratio | Allocated | Alloc Ratio |
 |------------------------- |--------:|------------|--------:|----------:|------:|----------:|------------:|
-| Blocking_RouterToRouter  |     64B | 755.73 Mbps |   1.48M |    6.77 ms |  1.00 |   5.34 MB |       1.00 |
-| NonBlocking_RouterToRouter |     64B | 742.83 Mbps |   1.45M |    6.89 ms |  1.02 |   5.34 MB |       1.00 |
-| Poller_RouterToRouter    |     64B | 763.56 Mbps |   1.49M |    6.71 ms |  0.99 |   5.34 MB |       1.00 |
+| Blocking_RouterToRouter  |     64B | 735.17 Mbps |   1.44M |    6.96 ms |  1.00 |   5.34 MB |       1.00 |
+| NonBlocking_RouterToRouter |     64B | 699.81 Mbps |   1.37M |    7.32 ms |  1.05 |   5.34 MB |       1.00 |
+| Poller_RouterToRouter    |     64B | 730.11 Mbps |   1.43M |    7.01 ms |  1.01 |   5.34 MB |       1.00 |
 |                          |         |            |         |           |       |           |             |
-| Blocking_RouterToRouter  |     1KB | 10.42 Gbps | 868.18K |   11.52 ms |  1.00 |   5.50 MB |       1.00 |
-| NonBlocking_RouterToRouter |     1KB |  9.13 Gbps | 760.77K |   13.14 ms |  1.14 |   5.49 MB |       1.00 |
-| Poller_RouterToRouter    |     1KB | 10.58 Gbps | 881.92K |   11.34 ms |  0.98 |   5.50 MB |       1.00 |
+| Blocking_RouterToRouter  |    512B |  5.57 Gbps |   1.36M |    7.36 ms |  1.00 |   5.50 MB |       1.00 |
+| NonBlocking_RouterToRouter |    512B |  5.04 Gbps |   1.23M |    8.12 ms |  1.10 |   5.49 MB |       1.00 |
+| Poller_RouterToRouter    |    512B |  5.45 Gbps |   1.33M |    7.52 ms |  1.02 |   5.50 MB |       1.00 |
 |                          |         |            |         |           |       |           |             |
-| Blocking_RouterToRouter  |    64KB |  4.50 GB/s |  68.70K |  145.55 ms |  1.00 |   5.56 MB |       1.00 |
-| NonBlocking_RouterToRouter |    64KB |  2.08 GB/s |  31.78K |  314.67 ms |  2.16 |   5.50 MB |       0.99 |
-| Poller_RouterToRouter    |    64KB |  4.49 GB/s |  68.45K |  146.10 ms |  1.00 |   5.56 MB |       1.00 |
+| Blocking_RouterToRouter  |     1KB |  8.69 Gbps |   1.06M |    9.42 ms |  1.00 |   5.50 MB |       1.00 |
+| NonBlocking_RouterToRouter |     1KB |  8.00 Gbps | 976.90K |   10.24 ms |  1.09 |   5.49 MB |       1.00 |
+| Poller_RouterToRouter    |     1KB |  8.76 Gbps |   1.07M |    9.35 ms |  0.99 |   5.50 MB |       1.00 |
+|                          |         |            |         |           |       |           |             |
+| Blocking_RouterToRouter  |    64KB |  4.41 GB/s |  67.33K |  148.51 ms |  1.00 |   5.57 MB |       1.00 |
+| NonBlocking_RouterToRouter |    64KB |  2.23 GB/s |  34.10K |  293.29 ms |  1.97 |   5.50 MB |       0.99 |
+| Poller_RouterToRouter    |    64KB |  4.59 GB/s |  70.02K |  142.82 ms |  0.96 |   5.57 MB |       1.00 |
 
 ### Detailed Metrics
 
 | Method                   | Size    | Score (ops/s) | Error      | StdDev    | Latency   | Gen0      |
 |------------------------- |--------:|--------------:|-----------:|----------:|----------:|----------:|
-| Blocking_RouterToRouter  |     64B |       147.60 |   0.2040 ms |   0.0474 ms | 677.49 ns |   57.0000 |
-| NonBlocking_RouterToRouter |     64B |       145.08 |   0.1462 ms |   0.0339 ms | 689.25 ns |   55.0000 |
-| Poller_RouterToRouter    |     64B |       149.13 |   0.1954 ms |   0.0454 ms | 670.55 ns |   58.0000 |
+| Blocking_RouterToRouter  |     64B |       143.59 |   0.0627 ms |   0.0146 ms | 696.43 ns |   55.0000 |
+| NonBlocking_RouterToRouter |     64B |       136.68 |   0.1011 ms |   0.0235 ms | 731.62 ns |   53.0000 |
+| Poller_RouterToRouter    |     64B |       142.60 |   0.1237 ms |   0.0287 ms | 701.27 ns |   55.0000 |
 |                          |         |               |            |           |           |           |
-| Blocking_RouterToRouter  |     1KB |        86.82 |   2.9687 ms |   0.6896 ms |   1.15 μs |   33.0000 |
-| NonBlocking_RouterToRouter |     1KB |        76.08 |   1.1124 ms |   0.2584 ms |   1.31 μs |   29.0000 |
-| Poller_RouterToRouter    |     1KB |        88.19 |   0.7164 ms |   0.1664 ms |   1.13 μs |   34.0000 |
+| Blocking_RouterToRouter  |    512B |       135.92 |   0.1854 ms |   0.0431 ms | 735.75 ns |   52.0000 |
+| NonBlocking_RouterToRouter |    512B |       123.12 |   0.1267 ms |   0.0294 ms | 812.22 ns |   47.0000 |
+| Poller_RouterToRouter    |    512B |       132.97 |   0.1580 ms |   0.0367 ms | 752.05 ns |   50.0000 |
 |                          |         |               |            |           |           |           |
-| Blocking_RouterToRouter  |    64KB |         6.87 |  28.0516 ms |   6.5158 ms |  14.56 μs |    2.0000 |
-| NonBlocking_RouterToRouter |    64KB |         3.18 |  27.8433 ms |   6.4674 ms |  31.47 μs |    1.0000 |
-| Poller_RouterToRouter    |    64KB |         6.84 |  22.7549 ms |   5.2855 ms |  14.61 μs |    2.0000 |
+| Blocking_RouterToRouter  |     1KB |       106.11 |   0.2328 ms |   0.0541 ms | 942.44 ns |   40.0000 |
+| NonBlocking_RouterToRouter |     1KB |        97.69 |   0.1830 ms |   0.0425 ms |   1.02 μs |   37.0000 |
+| Poller_RouterToRouter    |     1KB |       106.95 |   0.2135 ms |   0.0496 ms | 935.04 ns |   41.0000 |
+|                          |         |               |            |           |           |           |
+| Blocking_RouterToRouter  |    64KB |         6.73 |   3.1031 ms |   0.7208 ms |  14.85 μs |    2.0000 |
+| NonBlocking_RouterToRouter |    64KB |         3.41 |  12.4926 ms |   2.9018 ms |  29.33 μs |    2.0000 |
+| Poller_RouterToRouter    |    64KB |         7.00 |   2.2215 ms |   0.5160 ms |  14.28 μs |    2.0000 |
 
 ### Mode Descriptions
 
@@ -226,9 +249,10 @@ while (n < messageCount) {
 - **Best for**: Single socket applications
 
 **Performance:**
-- 64B: 1.48M msg/sec
-- 1.5KB: 868K msg/sec
-- 64KB: 69K msg/sec
+- 64B: 1.44M msg/sec
+- 512B: 1.36M msg/sec
+- 1KB: 1.06M msg/sec
+- 64KB: 67K msg/sec
 
 #### 2. Poller (Recommended for Multiple Sockets)
 ```java
@@ -252,11 +276,12 @@ while (n < messageCount) {
 - **Best for**: Multi-socket applications
 
 **Performance:**
-- 64B: 1.49M msg/sec (101% of Blocking)
-- 1.5KB: 882K msg/sec (102% of Blocking)
-- 64KB: 68K msg/sec (99% of Blocking)
+- 64B: 1.43M msg/sec (99% of Blocking)
+- 512B: 1.33M msg/sec (98% of Blocking)
+- 1KB: 1.07M msg/sec (101% of Blocking)
+- 64KB: 70K msg/sec (104% of Blocking)
 
-**Verdict**: Poller matches Blocking performance while providing multi-socket capability.
+**Verdict**: Poller matches or exceeds Blocking performance while providing multi-socket capability.
 
 #### 3. NonBlocking with Sleep ❌ NOT RECOMMENDED
 ```java
@@ -277,9 +302,10 @@ while (n < messageCount) {
 - **Avoid in production**
 
 **Performance:**
-- 64B: 1.45M msg/sec (98% of Blocking)
-- 1.5KB: 761K msg/sec (88% of Blocking)
-- 64KB: 32K msg/sec (46% of Blocking) ❌
+- 64B: 1.37M msg/sec (95% of Blocking)
+- 512B: 1.23M msg/sec (90% of Blocking)
+- 1KB: 977K msg/sec (92% of Blocking)
+- 64KB: 34K msg/sec (51% of Blocking) ❌
 
 **Verdict**: Significantly worse for large messages. Use Poller instead.
 
@@ -323,22 +349,22 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
 ## Key Takeaways
 
 1. **Memory Strategy**:
-   - Small messages: Use `ByteArray` (2.67M msg/sec @ 64B)
-   - Medium messages: Use `Message` (967K msg/sec @ 1.5KB)
-   - Large messages: Use `ArrayPool` for reduced GC (73% less allocation)
-   - **Never use** `MessageZeroCopy` (90x slower)
+   - Small messages (<512B): Use `ByteArray` (2.94M msg/sec @ 64B)
+   - Medium messages (512B-1KB): Use `ByteArray` or `ArrayPool` (1.5M msg/sec @ 512B)
+   - Large messages (>8KB): Use `ArrayPool` for reduced GC (>99% less allocation)
+   - **Never use** `MessageZeroCopy` (63-107x slower)
 
 2. **Receive Mode**:
    - Single socket: Use `Blocking` (simplest)
-   - Multiple sockets: Use `Poller` (98-102% of Blocking performance)
+   - Multiple sockets: Use `Poller` (98-104% of Blocking performance)
    - **Never use** `NonBlocking` with sleep (2x slower for large messages)
 
 3. **GC Pressure**:
-   - ArrayPool reduces allocation by 73-98% vs ByteArray
-   - Trade-off: Slightly lower throughput for large messages (14-17%)
+   - ArrayPool reduces allocation by 94-99% vs ByteArray
+   - Trade-off: Slightly lower throughput for medium messages (6-12%)
    - Consider ArrayPool when GC pauses are problematic
 
 4. **Latency**:
-   - Small messages: Sub-microsecond latency (375-795 ns)
-   - Medium messages: ~1 microsecond
-   - Large messages: 12-15 microseconds
+   - Small messages: Sub-microsecond latency (340-830 ns)
+   - Medium messages: ~600-950 ns (512B-1KB)
+   - Large messages: 12-15 microseconds (64KB)

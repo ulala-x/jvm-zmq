@@ -1,7 +1,6 @@
 # JVM-ZMQ
 
-[![Build and Test](https://github.com/ulala-x/jvm-zmq/actions/workflows/build.yml/badge.svg)](https://github.com/ulala-x/jvm-zmq/actions/workflows/build.yml)
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.ulalax/zmq.svg)](https://search.maven.org/artifact/io.github.ulalax/zmq)
+[![CI - Build and Test](https://github.com/ulala-x/jvm-zmq/actions/workflows/ci.yml/badge.svg)](https://github.com/ulala-x/jvm-zmq/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![API Documentation](https://img.shields.io/badge/API-Documentation-blue)](https://ulala-x.github.io/jvm-zmq/)
 
@@ -18,22 +17,54 @@ A modern Java binding for ZeroMQ (libzmq) using JDK 22+ FFM (Foreign Function & 
 
 ## Installation
 
-### Gradle
+### GitHub Packages
+
+This library is published to GitHub Packages. Add the repository and dependency:
+
+#### Gradle
 
 ```kotlin
+repositories {
+    maven {
+        url = uri("https://maven.pkg.github.com/ulala-x/jvm-zmq")
+        credentials {
+            username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_ACTOR")
+            password = project.findProperty("gpr.token") as String? ?: System.getenv("GITHUB_TOKEN")
+        }
+    }
+}
+
 dependencies {
     implementation("io.github.ulalax:zmq:0.1")
 }
 ```
 
-### Maven
+#### Maven
 
 ```xml
+<repositories>
+    <repository>
+        <id>github</id>
+        <url>https://maven.pkg.github.com/ulala-x/jvm-zmq</url>
+    </repository>
+</repositories>
+
 <dependency>
     <groupId>io.github.ulalax</groupId>
     <artifactId>zmq</artifactId>
     <version>0.1</version>
 </dependency>
+```
+
+Add credentials to `~/.m2/settings.xml`:
+```xml
+<servers>
+    <server>
+        <id>github</id>
+        <username>YOUR_GITHUB_USERNAME</username>
+        <password>YOUR_GITHUB_TOKEN</password>
+    </server>
+</servers>
 ```
 
 **Important**: Enable native access when running your application:
@@ -193,40 +224,47 @@ Performance benchmarks on Router-to-Router pattern (Ubuntu 24.04 LTS, JDK 22.0.2
 ### Memory Strategy Performance
 
 **Small Messages (64 bytes):**
-- **ByteArray**: 2.67M msg/sec (1.37 Gbps) - **Best for small messages**
-- ArrayPool: 1.93M msg/sec (988 Mbps, 26% allocation vs ByteArray)
-- Message: 1.26M msg/sec (644 Mbps)
-- ❌ MessageZeroCopy: 29K msg/sec (severe degradation)
+- **ByteArray**: 2.94M msg/sec (1.51 Gbps) - **Best for small messages**
+- ArrayPool: 1.80M msg/sec (923 Mbps, 74% less allocation vs ByteArray)
+- Message: 1.20M msg/sec (614 Mbps)
+- ❌ MessageZeroCopy: 28K msg/sec (severe degradation)
 
-**Medium Messages (1,500 bytes):**
-- **Message**: 967K msg/sec (11.6 Gbps) - **Best for medium messages**
-- ArrayPool: 921K msg/sec (11.0 Gbps, 2% allocation vs ByteArray)
-- ByteArray: 911K msg/sec (10.9 Gbps)
+**Medium Messages (512 bytes):**
+- **ByteArray**: 1.60M msg/sec (6.55 Gbps) - **Best throughput**
+- ArrayPool: 1.51M msg/sec (6.19 Gbps, 94% less allocation vs ByteArray)
+- Message: 1.05M msg/sec (4.31 Gbps)
 - ❌ MessageZeroCopy: 26K msg/sec
 
+**Medium Messages (1,024 bytes):**
+- **ByteArray**: 1.16M msg/sec (9.47 Gbps) - **Best throughput**
+- ArrayPool: 1.09M msg/sec (8.94 Gbps, 97% less allocation vs ByteArray)
+- Message: 1.06M msg/sec (8.69 Gbps)
+- ❌ MessageZeroCopy: 25K msg/sec
+
 **Large Messages (65,536 bytes):**
-- **ByteArray**: 85K msg/sec (5.55 GB/s) - **Best for large messages**
-- ArrayPool: 73K msg/sec (4.76 GB/s, <1% allocation vs ByteArray)
-- Message: 71K msg/sec (4.66 GB/s)
-- ❌ MessageZeroCopy: 17K msg/sec
+- **ArrayPool**: 80K msg/sec (5.26 GB/s, >99% less allocation) - **Best for large messages**
+- ByteArray: 79K msg/sec (5.19 GB/s)
+- Message: 79K msg/sec (5.17 GB/s)
+- ❌ MessageZeroCopy: 18K msg/sec
 
 **Recommendations:**
-- **Small messages (<1KB)**: Use `socket.send(byte[])` for maximum throughput (2.67M msg/sec @ 64B)
-- **Medium messages (1-8KB)**: Use `Message` or `ByteArray` - similar performance (~900K msg/sec)
-- **Large messages (>8KB)**: Use `ArrayPool` pattern to reduce GC pressure (73% less allocation)
-- **Avoid**: `MessageZeroCopy` - shows 90x slowdown due to Arena allocation overhead
+- **Small messages (<512B)**: Use `socket.send(byte[])` for maximum throughput (2.94M msg/sec @ 64B)
+- **Medium messages (512B-1KB)**: Use `ByteArray` or `ArrayPool` - similar performance with 94-97% less GC
+- **Large messages (>8KB)**: Use `ArrayPool` pattern to reduce GC pressure (>99% less allocation)
+- **Avoid**: `MessageZeroCopy` - shows 63-107x slowdown due to Arena allocation overhead
 
 ### Receive Mode Performance
 
 | Message Size | Blocking | Poller | NonBlocking |
 |--------------|----------|--------|-------------|
-| **64 B** | 1.48M msg/sec | **1.49M msg/sec** | 1.45M msg/sec |
-| **1,500 B** | 868K msg/sec | **882K msg/sec** | 761K msg/sec |
-| **65,536 B** | **69K msg/sec** | 68K msg/sec | 32K msg/sec |
+| **64 B** | 1.44M msg/sec | **1.43M msg/sec** | 1.37M msg/sec |
+| **512 B** | 1.36M msg/sec | **1.33M msg/sec** | 1.23M msg/sec |
+| **1,024 B** | 1.06M msg/sec | **1.07M msg/sec** | 977K msg/sec |
+| **65,536 B** | 67K msg/sec | **70K msg/sec** | 34K msg/sec |
 
 **Recommendations:**
 - **Single socket**: Use `Blocking` mode (`socket.recv()`) for simplest implementation
-- **Multiple sockets**: Use `Poller` for event-driven programming - matches blocking performance (98-102%)
+- **Multiple sockets**: Use `Poller` for event-driven programming - matches or exceeds blocking performance (98-104%)
 - **Avoid**: `NonBlocking` with busy-wait/sleep - not recommended for production (2x slower for large messages)
 
 ### Running Benchmarks
