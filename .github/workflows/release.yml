@@ -61,9 +61,6 @@ jobs:
       - name: Create release JARs
         run: ./gradlew jar --no-daemon --stacktrace
 
-      - name: Create sources and javadoc JARs
-        run: ./gradlew sourcesJar javadocJar --no-daemon --stacktrace
-
       - name: List generated artifacts
         run: |
           echo "=== Generated JARs ==="
