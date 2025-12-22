@@ -246,6 +246,9 @@ JMH 벤치마크 결과 (Router-to-Router 패턴, 반복당 10,000개 메시지)
 
 프로덕션 환경에서 권장하는 고성능 수신 패턴:
 
+> **참고**: `Message` 객체를 사용하면 송신된 크기만큼 정확히 수신되지만, `byte[]` 버퍼를 사용할 경우
+> 예상되는 최대 메시지 크기만큼 미리 할당해야 합니다. `recv()`는 실제 수신된 바이트 수를 반환합니다.
+
 ```java
 import io.github.ulalax.zmq.*;
 import io.netty.buffer.ByteBuf;
@@ -256,7 +259,7 @@ public class HighPerformanceReceiver {
     private static final int MAX_MESSAGE_SIZE = 65536;
 
     public void receiveMessages(Socket socket) {
-        // 수신 버퍼를 한 번만 미리 할당
+        // byte[] 수신 시 최대 메시지 크기만큼 버퍼를 미리 할당해야 함
         byte[] recvBuffer = new byte[MAX_MESSAGE_SIZE];
 
         while (running) {

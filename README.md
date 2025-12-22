@@ -246,6 +246,9 @@ Based on JMH benchmarks (Router-to-Router pattern, 10,000 messages per iteration
 
 High-performance receiver pattern for production:
 
+> **Note**: Using `Message` object receives exactly the sent size, but when using `byte[]` buffer,
+> you must pre-allocate for the maximum expected message size. `recv()` returns actual bytes received.
+
 ```java
 import io.github.ulalax.zmq.*;
 import io.netty.buffer.ByteBuf;
@@ -256,7 +259,7 @@ public class HighPerformanceReceiver {
     private static final int MAX_MESSAGE_SIZE = 65536;
 
     public void receiveMessages(Socket socket) {
-        // Pre-allocate receive buffer once
+        // When receiving to byte[], pre-allocate for max message size
         byte[] recvBuffer = new byte[MAX_MESSAGE_SIZE];
 
         while (running) {
