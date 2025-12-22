@@ -1,3 +1,6 @@
+[![English](https://img.shields.io/badge/lang-en-red.svg)](CHANGELOG.md)
+[![한국어](https://img.shields.io/badge/lang-한국어-green.svg)](CHANGELOG.ko.md)
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
