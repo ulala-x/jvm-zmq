@@ -10,6 +10,8 @@
 
 ## [Unreleased]
 
+## [0.2] - 2025-12-22
+
 ### 변경됨
 - **Breaking Change**: Socket API를 .NET 스타일로 단순화
   - `send()`가 이제 `boolean` 반환 (true=성공, false=EAGAIN)
@@ -38,5 +40,6 @@
 - 모든 ZeroMQ 패턴을 시연하는 13개의 샘플 애플리케이션
 - Javadoc API 문서
 
-[Unreleased]: https://github.com/ulala-x/jvm-zmq/compare/v0.1...HEAD
+[Unreleased]: https://github.com/ulala-x/jvm-zmq/compare/v0.2...HEAD
+[0.2]: https://github.com/ulala-x/jvm-zmq/compare/v0.1...v0.2
 [0.1]: https://github.com/ulala-x/jvm-zmq/releases/tag/v0.1

@@ -7,7 +7,7 @@ allprojects {
     apply(plugin = "idea")
 
     group = "io.github.ulalax"
-    version = "0.1"
+    version = "0.2"
 
     repositories {
         mavenCentral()
