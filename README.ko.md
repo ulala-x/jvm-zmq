@@ -220,48 +220,50 @@ Router-to-Router 패턴 성능 벤치마크 (Ubuntu 24.04 LTS, JDK 22.0.2, 반�
 ### 메모리 전략 성능
 
 **작은 메시지 (64 bytes):**
-- **ByteArray**: 2.94M msg/sec (1.51 Gbps) - **작은 메시지에 최적**
-- ArrayPool: 1.80M msg/sec (923 Mbps, ByteArray 대비 74% 적은 할당)
+- **ByteArray**: 2.89M msg/sec (1.48 Gbps) - **작은 메시지에 최적**
+- ArrayPool: 1.87M msg/sec (958 Mbps)
 - Message: 1.20M msg/sec (614 Mbps)
-- ❌ MessageZeroCopy: 28K msg/sec (심각한 성능 저하)
+- ❌ MessageZeroCopy: 28K msg/sec (102배 느림)
 
 **중간 메시지 (512 bytes):**
-- **ByteArray**: 1.60M msg/sec (6.55 Gbps) - **최고 처리량**
-- ArrayPool: 1.51M msg/sec (6.19 Gbps, ByteArray 대비 94% 적은 할당)
-- Message: 1.05M msg/sec (4.31 Gbps)
-- ❌ MessageZeroCopy: 26K msg/sec
+- **ByteArray**: 1.68M msg/sec (6.89 Gbps) - **최고 처리량**
+- ArrayPool: 1.54M msg/sec (6.29 Gbps)
+- Message: 1.08M msg/sec (4.42 Gbps)
+- ❌ MessageZeroCopy: 27K msg/sec
 
 **중간 메시지 (1,024 bytes):**
 - **ByteArray**: 1.16M msg/sec (9.47 Gbps) - **최고 처리량**
-- ArrayPool: 1.09M msg/sec (8.94 Gbps, ByteArray 대비 97% 적은 할당)
-- Message: 1.06M msg/sec (8.69 Gbps)
-- ❌ MessageZeroCopy: 25K msg/sec
+- ArrayPool: 1.12M msg/sec (9.16 Gbps)
+- Message: 1.07M msg/sec (8.72 Gbps)
+- ❌ MessageZeroCopy: 26K msg/sec
 
-**큰 메시지 (65,536 bytes):**
-- **ArrayPool**: 80K msg/sec (5.26 GB/s, >99% 적은 할당) - **큰 메시지에 최적**
-- ByteArray: 79K msg/sec (5.19 GB/s)
-- Message: 79K msg/sec (5.17 GB/s)
-- ❌ MessageZeroCopy: 18K msg/sec
+**큰 메시지 (64KB+):**
+
+| 크기 | ByteArray | ArrayPool | Message | ZeroCopy |
+|------|-----------|-----------|---------|----------|
+| 64 KB | 76K msg/sec | **81K msg/sec** | 74K msg/sec | 18K msg/sec |
+| 128 KB | 47K msg/sec | **48K msg/sec** | 45K msg/sec | 15K msg/sec |
+| 256 KB | 27K msg/sec | **31K msg/sec** | 26K msg/sec | 12K msg/sec |
 
 **권장 사항:**
-- **작은 메시지 (<512B)**: 최대 처리량을 위해 `socket.send(byte[])`를 사용 (64B에서 2.94M msg/sec)
-- **중간 메시지 (512B-1KB)**: `ByteArray` 또는 `ArrayPool` 사용 - 유사한 성능에 94-97% 적은 GC
-- **큰 메시지 (>8KB)**: GC 압력을 줄이기 위해 `ArrayPool` 패턴 사용 (>99% 적은 할당)
-- **피하기**: `MessageZeroCopy` - Arena 할당 오버헤드로 인해 63-107배 느림
+- **작은 메시지 (<512B)**: 최대 처리량을 위해 `socket.send(byte[])`를 사용 (64B에서 2.89M msg/sec)
+- **중간 메시지 (512B-1KB)**: `ByteArray` 또는 `ArrayPool` 사용 - 유사한 성능
+- **큰 메시지 (>64KB)**: 최고 처리량과 적은 GC 압력을 위해 `ArrayPool` 사용
+- **피하기**: `MessageZeroCopy` - Arena 할당 오버헤드로 인해 100배+ 느림
 
 ### 수신 모드 성능
 
 | 메시지 크기 | 블로킹 | 폴러 | 논블로킹 |
 |--------------|----------|--------|-------------|
-| **64 B** | 1.44M msg/sec | **1.43M msg/sec** | 1.37M msg/sec |
-| **512 B** | 1.36M msg/sec | **1.33M msg/sec** | 1.23M msg/sec |
-| **1,024 B** | 1.06M msg/sec | **1.07M msg/sec** | 977K msg/sec |
-| **65,536 B** | 67K msg/sec | **70K msg/sec** | 34K msg/sec |
+| **64 B** | **1.48M msg/sec** | 1.48M msg/sec | 1.38M msg/sec |
+| **512 B** | **1.36M msg/sec** | 1.34M msg/sec | 1.27M msg/sec |
+| **1 KB** | **1.10M msg/sec** | 1.10M msg/sec | 943K msg/sec |
+| **64 KB** | 70K msg/sec | 68K msg/sec | 44K msg/sec |
 
 **권장 사항:**
-- **단일 소켓**: 가장 간단한 구현을 위해 `블로킹` 모드 (`socket.recv()`) 사용
-- **다중 소켓**: 이벤트 기반 프로그래밍을 위해 `폴러`를 사용 - 블로킹 성능과 동일하거나 초과 (98-104%)
-- **피하기**: busy-wait/sleep을 사용하는 `논블로킹` - 프로덕션에 권장하지 않음 (큰 메시지의 경우 2배 느림)
+- **단일 소켓**: 가장 간단한 구현과 최고 성능을 위해 `블로킹` 모드 (`socket.recv()`) 사용
+- **다중 소켓**: 이벤트 기반 프로그래밍을 위해 `폴러` 사용 - 블로킹 성능과 동일
+- **피하기**: busy-wait/sleep을 사용하는 `논블로킹` - 큰 메시지에서 37% 느림
 
 ### 벤치마크 실행
 

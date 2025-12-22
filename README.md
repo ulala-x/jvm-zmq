@@ -220,48 +220,50 @@ Performance benchmarks on Router-to-Router pattern (Ubuntu 24.04 LTS, JDK 22.0.2
 ### Memory Strategy Performance
 
 **Small Messages (64 bytes):**
-- **ByteArray**: 2.94M msg/sec (1.51 Gbps) - **Best for small messages**
-- ArrayPool: 1.80M msg/sec (923 Mbps, 74% less allocation vs ByteArray)
+- **ByteArray**: 2.89M msg/sec (1.48 Gbps) - **Best for small messages**
+- ArrayPool: 1.87M msg/sec (958 Mbps)
 - Message: 1.20M msg/sec (614 Mbps)
-- ❌ MessageZeroCopy: 28K msg/sec (severe degradation)
+- ❌ MessageZeroCopy: 28K msg/sec (102x slower)
 
 **Medium Messages (512 bytes):**
-- **ByteArray**: 1.60M msg/sec (6.55 Gbps) - **Best throughput**
-- ArrayPool: 1.51M msg/sec (6.19 Gbps, 94% less allocation vs ByteArray)
-- Message: 1.05M msg/sec (4.31 Gbps)
-- ❌ MessageZeroCopy: 26K msg/sec
+- **ByteArray**: 1.68M msg/sec (6.89 Gbps) - **Best throughput**
+- ArrayPool: 1.54M msg/sec (6.29 Gbps)
+- Message: 1.08M msg/sec (4.42 Gbps)
+- ❌ MessageZeroCopy: 27K msg/sec
 
 **Medium Messages (1,024 bytes):**
 - **ByteArray**: 1.16M msg/sec (9.47 Gbps) - **Best throughput**
-- ArrayPool: 1.09M msg/sec (8.94 Gbps, 97% less allocation vs ByteArray)
-- Message: 1.06M msg/sec (8.69 Gbps)
-- ❌ MessageZeroCopy: 25K msg/sec
+- ArrayPool: 1.12M msg/sec (9.16 Gbps)
+- Message: 1.07M msg/sec (8.72 Gbps)
+- ❌ MessageZeroCopy: 26K msg/sec
 
-**Large Messages (65,536 bytes):**
-- **ArrayPool**: 80K msg/sec (5.26 GB/s, >99% less allocation) - **Best for large messages**
-- ByteArray: 79K msg/sec (5.19 GB/s)
-- Message: 79K msg/sec (5.17 GB/s)
-- ❌ MessageZeroCopy: 18K msg/sec
+**Large Messages (64KB+):**
+
+| Size | ByteArray | ArrayPool | Message | ZeroCopy |
+|------|-----------|-----------|---------|----------|
+| 64 KB | 76K msg/sec | **81K msg/sec** | 74K msg/sec | 18K msg/sec |
+| 128 KB | 47K msg/sec | **48K msg/sec** | 45K msg/sec | 15K msg/sec |
+| 256 KB | 27K msg/sec | **31K msg/sec** | 26K msg/sec | 12K msg/sec |
 
 **Recommendations:**
-- **Small messages (<512B)**: Use `socket.send(byte[])` for maximum throughput (2.94M msg/sec @ 64B)
-- **Medium messages (512B-1KB)**: Use `ByteArray` or `ArrayPool` - similar performance with 94-97% less GC
-- **Large messages (>8KB)**: Use `ArrayPool` pattern to reduce GC pressure (>99% less allocation)
-- **Avoid**: `MessageZeroCopy` - shows 63-107x slowdown due to Arena allocation overhead
+- **Small messages (<512B)**: Use `socket.send(byte[])` for maximum throughput (2.89M msg/sec @ 64B)
+- **Medium messages (512B-1KB)**: Use `ByteArray` or `ArrayPool` - similar performance
+- **Large messages (>64KB)**: Use `ArrayPool` for best throughput and less GC pressure
+- **Avoid**: `MessageZeroCopy` - shows 100x+ slowdown due to Arena allocation overhead
 
 ### Receive Mode Performance
 
 | Message Size | Blocking | Poller | NonBlocking |
 |--------------|----------|--------|-------------|
-| **64 B** | 1.44M msg/sec | **1.43M msg/sec** | 1.37M msg/sec |
-| **512 B** | 1.36M msg/sec | **1.33M msg/sec** | 1.23M msg/sec |
-| **1,024 B** | 1.06M msg/sec | **1.07M msg/sec** | 977K msg/sec |
-| **65,536 B** | 67K msg/sec | **70K msg/sec** | 34K msg/sec |
+| **64 B** | **1.48M msg/sec** | 1.48M msg/sec | 1.38M msg/sec |
+| **512 B** | **1.36M msg/sec** | 1.34M msg/sec | 1.27M msg/sec |
+| **1 KB** | **1.10M msg/sec** | 1.10M msg/sec | 943K msg/sec |
+| **64 KB** | 70K msg/sec | 68K msg/sec | 44K msg/sec |
 
 **Recommendations:**
-- **Single socket**: Use `Blocking` mode (`socket.recv()`) for simplest implementation
-- **Multiple sockets**: Use `Poller` for event-driven programming - matches or exceeds blocking performance (98-104%)
-- **Avoid**: `NonBlocking` with busy-wait/sleep - not recommended for production (2x slower for large messages)
+- **Single socket**: Use `Blocking` mode (`socket.recv()`) for simplest implementation and best performance
+- **Multiple sockets**: Use `Poller` for event-driven programming - matches blocking performance
+- **Avoid**: `NonBlocking` with busy-wait/sleep - 37% slower for large messages
 
 ### Running Benchmarks
 
