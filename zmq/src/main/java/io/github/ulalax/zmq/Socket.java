@@ -18,7 +18,7 @@ import java.util.Optional;
  * <p>This API follows .NET ZMQ style with simple return values:</p>
  * <ul>
  *   <li><b>Send</b> - Returns {@code boolean} (true=success, false=EAGAIN)</li>
- *   <li><b>Recv</b> - Returns {@code int} (bytes received, -1=EAGAIN)</li>
+ *   <li><b>Recv</b> - Returns {@code int} (bytes received, {@link #NO_MESSAGE}=EAGAIN)</li>
  *   <li><b>Errors</b> - Real ZMQ errors throw {@link ZmqException}</li>
  * </ul>
  *
@@ -44,6 +44,22 @@ import java.util.Optional;
  * @see SocketOption
  */
 public final class Socket implements AutoCloseable {
+
+    /**
+     * Return value from recv() indicating no message is available.
+     * Returned when using non-blocking flags and there is nothing to receive (EAGAIN).
+     *
+     * <p>Example usage:</p>
+     * <pre>{@code
+     * int bytes = socket.recv(buffer, RecvFlags.DONT_WAIT);
+     * if (bytes == Socket.NO_MESSAGE) {
+     *     // No message available - try again later
+     * } else {
+     *     // Process received data
+     * }
+     * }</pre>
+     */
+    public static final int NO_MESSAGE = -1;
 
     private static final Cleaner CLEANER = Cleaner.create();
     private static final int STACK_BUFFER_SIZE = 512;
@@ -362,7 +378,7 @@ public final class Socket implements AutoCloseable {
      *
      * @param buffer The buffer to receive into
      * @param flags Receive flags (e.g., {@link RecvFlags#DONT_WAIT} for non-blocking)
-     * @return Number of bytes received, or {@code -1} if would block (EAGAIN)
+     * @return Number of bytes received, or {@link #NO_MESSAGE} if would block (EAGAIN)
      * @throws NullPointerException if buffer is null
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      *
@@ -372,7 +388,7 @@ public final class Socket implements AutoCloseable {
      * int bytesRead = socket.recv(buffer, RecvFlags.DONT_WAIT);
      * if (bytesRead > 0) {
      *     System.out.println("Received " + bytesRead + " bytes");
-     * } else if (bytesRead == -1) {
+     * } else if (bytesRead == Socket.NO_MESSAGE) {
      *     System.out.println("No data available");
      * }
      * }</pre>
@@ -419,7 +435,7 @@ public final class Socket implements AutoCloseable {
     /**
      * Receives data into a buffer with default flags (blocking).
      * @param buffer The buffer to receive into
-     * @return Number of bytes received, or {@code -1} if would block (EAGAIN)
+     * @return Number of bytes received, or {@link #NO_MESSAGE} if would block (EAGAIN)
      * @see #recv(byte[], RecvFlags)
      */
     public int recv(byte[] buffer) {
@@ -430,7 +446,7 @@ public final class Socket implements AutoCloseable {
      * Receives a message.
      * @param message The message to receive into
      * @param flags Receive flags
-     * @return Number of bytes received, or {@code -1} if would block (EAGAIN)
+     * @return Number of bytes received, or {@link #NO_MESSAGE} if would block (EAGAIN)
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      */
     public int recv(Message message, RecvFlags flags) {
@@ -614,7 +630,7 @@ public final class Socket implements AutoCloseable {
      * Convenience method equivalent to {@code recv(buffer, RecvFlags.DONT_WAIT)}.
      *
      * @param buffer The buffer to receive into
-     * @return Number of bytes received, or {@code -1} if would block (EAGAIN)
+     * @return Number of bytes received, or {@link #NO_MESSAGE} if would block (EAGAIN)
      * @throws NullPointerException if buffer is null
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      *
@@ -636,7 +652,7 @@ public final class Socket implements AutoCloseable {
      * Convenience method equivalent to {@code recv(message, RecvFlags.DONT_WAIT)}.
      *
      * @param message The message to receive into
-     * @return Number of bytes received, or {@code -1} if would block (EAGAIN)
+     * @return Number of bytes received, or {@link #NO_MESSAGE} if would block (EAGAIN)
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      */
     public int tryRecv(Message message) {

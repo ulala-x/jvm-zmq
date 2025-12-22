@@ -163,7 +163,7 @@ public class ReceiveModeBenchmark {
                 // Batch receive available messages (reduces syscalls)
                 while (n < state.messageCount) {
                     int idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                    if (idResult == -1) break;  // No more available (EAGAIN)
+                    if (idResult == Socket.NO_MESSAGE) break;  // No more available (EAGAIN)
 
                     socket.recv(state.recvBuffer, RecvFlags.NONE);
                     state.receiverLatch.countDown();
@@ -186,7 +186,7 @@ public class ReceiveModeBenchmark {
             int n = 0;
             while (n < state.messageCount) {
                 int idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                if (idResult != -1) {
+                if (idResult != Socket.NO_MESSAGE) {
                     socket.recv(state.recvBuffer, RecvFlags.DONT_WAIT);
                     state.receiverLatch.countDown();
                     n++;
@@ -194,7 +194,7 @@ public class ReceiveModeBenchmark {
                     // Batch receive without sleep
                     while (n < state.messageCount) {
                         int batchIdResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                        if (batchIdResult == -1) {
+                        if (batchIdResult == Socket.NO_MESSAGE) {
                             break;
                         }
                         socket.recv(state.recvBuffer, RecvFlags.DONT_WAIT);
@@ -227,7 +227,7 @@ public class ReceiveModeBenchmark {
                 // Batch receive all available messages
                 while (n < state.messageCount) {
                     int idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                    if (idResult == -1) break;  // No more available (EAGAIN)
+                    if (idResult == Socket.NO_MESSAGE) break;  // No more available (EAGAIN)
 
                     socket.recv(state.recvBuffer, RecvFlags.NONE);
                     state.receiverLatch.countDown();
