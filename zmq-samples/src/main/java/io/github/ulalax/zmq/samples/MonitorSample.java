@@ -120,12 +120,14 @@ public class MonitorSample {
                 // Hub receives messages
                 List<String> registeredSpokes = new ArrayList<>();
                 for (int i = 0; i < 2; i++) {
-                    byte[] spokeIdBytes = hub.recvBytes().value();
+                    Message spokeIdMsg = new Message();
+                    hub.recv(spokeIdMsg, RecvFlags.NONE);
+                    byte[] spokeIdBytes = spokeIdMsg.toByteArray();
                     if (!hub.hasMore()) {
                         System.err.println("Error: Expected message frame");
                         continue;
                     }
-                    String message = hub.recvString().value();
+                    String message = hub.recvString();
                     String spokeId = new String(spokeIdBytes, StandardCharsets.UTF_8);
                     registeredSpokes.add(spokeId);
                     System.out.println("[Hub] Received from [" + spokeId + "]: " + message);
@@ -140,12 +142,13 @@ public class MonitorSample {
 
                 // Spokes receive broadcasts
                 for (Socket spoke : new Socket[]{spoke1, spoke2}) {
-                    byte[] fromBytes = spoke.recvBytes().value();
+                    Message fromMsg = new Message();
+                    spoke.recv(fromMsg, RecvFlags.NONE);
                     if (!spoke.hasMore()) {
                         System.err.println("Error: Expected message frame");
                         continue;
                     }
-                    String msg = spoke.recvString().value();
+                    String msg = spoke.recvString();
                     String spokeName = (spoke == spoke1) ? "SPOKE1" : "SPOKE2";
                     System.out.println("[" + spokeName + "] received: " + msg);
                 }
@@ -189,13 +192,15 @@ public class MonitorSample {
                     // Receive monitor event (two-frame message)
                     // Frame 1: 6 bytes (event type: uint16 LE + value: int32 LE)
                     // Frame 2: endpoint address string
-                    byte[] eventFrame = monitor.recvBytes().value();
+                    Message eventMsg = new Message();
+                    monitor.recv(eventMsg, RecvFlags.NONE);
+                    byte[] eventFrame = eventMsg.toByteArray();
                     if (!monitor.hasMore()) {
                         // Invalid monitor message format
                         continue;
                     }
 
-                    String address = monitor.recvString().value();
+                    String address = monitor.recvString();
 
                     // Parse the event data
                     SocketMonitorEventData eventData = SocketMonitorEventData.parse(eventFrame, address);

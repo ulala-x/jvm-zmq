@@ -1,12 +1,14 @@
 package io.github.ulalax.zmq.samples;
 
 import io.github.ulalax.zmq.Context;
+import io.github.ulalax.zmq.Message;
 import io.github.ulalax.zmq.MultipartMessage;
-import io.github.ulalax.zmq.RecvResult;
+import io.github.ulalax.zmq.RecvFlags;
 import io.github.ulalax.zmq.SendFlags;
 import io.github.ulalax.zmq.Socket;
 import io.github.ulalax.zmq.SocketOption;
 import io.github.ulalax.zmq.SocketType;
+import io.github.ulalax.zmq.core.ZmqException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,24 +16,24 @@ import java.util.List;
 /**
  * Multipart Message Extensions Sample
  *
- * <p>Demonstrates the Socket extension methods for convenient multipart message handling
- * using the new Result API pattern. Multipart messages allow you to send multiple frames
- * as a single atomic message. All frames are delivered together or not at all.</p>
+ * <p>Demonstrates the Socket extension methods for convenient multipart message handling.
+ * Multipart messages allow you to send multiple frames as a single atomic message.
+ * All frames are delivered together or not at all.</p>
  *
  * <p>This sample includes six examples:</p>
  * <ul>
- *   <li>Example 1: Send multipart using the new SendFlags API</li>
+ *   <li>Example 1: Send multipart using the SendFlags API</li>
  *   <li>Example 2: Send multipart with byte arrays using SendFlags</li>
  *   <li>Example 3: Send multipart using MultipartMessage container</li>
- *   <li>Example 4: Receive multipart using recvMultipart with Result API</li>
- *   <li>Example 5: Non-blocking receive with Result API - demonstrates wouldBlock() and ifPresent()</li>
+ *   <li>Example 4: Receive multipart using recvMultipart (blocking)</li>
+ *   <li>Example 5: Non-blocking receive with timeout and exception handling</li>
  *   <li>Example 6: Router-Dealer pattern with SendFlags.SEND_MORE</li>
  * </ul>
  *
- * <p><b>Key API Changes Demonstrated:</b></p>
+ * <p><b>Key API Features Demonstrated:</b></p>
  * <ul>
- *   <li>SendFlags.SEND_MORE instead of deprecated sendMore() method</li>
- *   <li>RecvResult API with isPresent(), wouldBlock(), and functional-style ifPresent()</li>
+ *   <li>SendFlags.SEND_MORE for multipart message construction</li>
+ *   <li>Direct return values (String, byte[], MultipartMessage) instead of wrapper types</li>
  *   <li>Type-safe multipart message handling</li>
  * </ul>
  */
@@ -55,11 +57,10 @@ public class MultipartSample {
     }
 
     /**
-     * Example 1: Send multipart using the new SendFlags API.
+     * Example 1: Send multipart using the SendFlags API.
      *
-     * <p>Demonstrates the modern approach to sending multipart messages using SendFlags.SEND_MORE
-     * instead of the deprecated sendMore() method. The last frame uses SendFlags.NONE to signal
-     * the end of the multipart message.</p>
+     * <p>Demonstrates sending multipart messages using SendFlags.SEND_MORE.
+     * The last frame uses SendFlags.NONE to signal the end of the multipart message.</p>
      */
     private static void example1_SendMultipartWithStrings() {
         System.out.println("Example 1: Send multipart with SendFlags.SEND_MORE");
@@ -77,18 +78,17 @@ public class MultipartSample {
 
             sleep(100);
 
-            // NEW API: Use SendFlags.SEND_MORE for all frames except the last
-            // OLD API: sendMore("Header"); sendMore("Body"); send("Footer");
+            // Use SendFlags.SEND_MORE for all frames except the last
             sender.send("Header", SendFlags.SEND_MORE);
             sender.send("Body", SendFlags.SEND_MORE);
             sender.send("Footer", SendFlags.NONE);  // Last frame uses NONE
             System.out.println("Sent 3-frame message: Header, Body, Footer");
 
-            // Receive using frame-by-frame method with Result API
+            // Receive using frame-by-frame method
             // In blocking mode, these will always succeed (or throw)
-            String header = receiver.recvString().value();
-            String body = receiver.recvString().value();
-            String footer = receiver.recvString().value();
+            String header = receiver.recvString();
+            String body = receiver.recvString();
+            String footer = receiver.recvString();
 
             System.out.println("Received: " + header + ", " + body + ", " + footer);
             System.out.println();
@@ -136,9 +136,11 @@ public class MultipartSample {
             }
             System.out.println("Sent " + frames.size() + " binary frames");
 
-            // Receive frames with Result API
+            // Receive frames
             for (int i = 0; i < frames.size(); i++) {
-                byte[] frame = receiver.recvBytes().value();  // .value() extracts from RecvResult
+                Message frameMsg = new Message();
+                receiver.recv(frameMsg, RecvFlags.NONE);
+                byte[] frame = frameMsg.toByteArray();
                 System.out.print("Frame " + (i + 1) + ": [");
                 for (int j = 0; j < frame.length; j++) {
                     System.out.print(String.format("0x%02X", frame[j]));
@@ -186,11 +188,15 @@ public class MultipartSample {
             sender.sendMultipart(message);
             System.out.println("Sent MultipartMessage with " + message.size() + " frames");
 
-            // Receive and display - using .value() to extract from RecvResult
-            String cmd = receiver.recvString().value();
-            byte[] delimiter = receiver.recvBytes().value();
-            byte[] binary = receiver.recvBytes().value();
-            String payload = receiver.recvString().value();
+            // Receive and display
+            String cmd = receiver.recvString();
+            Message delimiterMsg = new Message();
+            receiver.recv(delimiterMsg, RecvFlags.NONE);
+            byte[] delimiter = delimiterMsg.toByteArray();
+            Message binaryMsg = new Message();
+            receiver.recv(binaryMsg, RecvFlags.NONE);
+            byte[] binary = binaryMsg.toByteArray();
+            String payload = receiver.recvString();
 
             System.out.println("Command: " + cmd);
             System.out.println("Delimiter: " + (delimiter.length == 0 ? "empty" : "not empty"));
@@ -212,15 +218,14 @@ public class MultipartSample {
     }
 
     /**
-     * Example 4: Receive multipart using the new Result API (blocking mode).
+     * Example 4: Receive multipart in blocking mode.
      *
-     * <p>Demonstrates using RecvResult with functional-style processing. In blocking mode,
-     * recvMultipart() will always succeed (or throw on error), so the Result will always
-     * be present. However, using the Result API provides consistency and future-proofing.</p>
+     * <p>Demonstrates receiving complete multipart messages.
+     * In blocking mode, recvMultipart() will block until a message arrives or throw on error.</p>
      */
     private static void example4_RecvMultipart() {
-        System.out.println("Example 4: recvMultipart with Result API (blocking)");
-        System.out.println("----------------------------------------------------");
+        System.out.println("Example 4: recvMultipart (blocking)");
+        System.out.println("------------------------------------");
 
         try (Context ctx = new Context();
              Socket sender = new Socket(ctx, SocketType.PUSH);
@@ -242,18 +247,15 @@ public class MultipartSample {
             sender.sendMultipart(sendMsg);
             System.out.println("Sent: Part1, Part2, Part3");
 
-            // NEW API: recvMultipart() returns RecvResult<MultipartMessage>
+            // Receive complete multipart message
             // In blocking mode, this will block until a message arrives
-            RecvResult<MultipartMessage> result = receiver.recvMultipart();
+            MultipartMessage msg = receiver.recvMultipart().orElseThrow();
 
-            // Functional-style processing with ifPresent()
-            result.ifPresent(msg -> {
-                System.out.println("Received " + msg.size() + " frames:");
-                for (int i = 0; i < msg.size(); i++) {
-                    String frameText = msg.getString(i);
-                    System.out.println("  Frame " + (i + 1) + ": " + frameText);
-                }
-            });
+            System.out.println("Received " + msg.size() + " frames:");
+            for (int i = 0; i < msg.size(); i++) {
+                String frameText = msg.getString(i);
+                System.out.println("  Frame " + (i + 1) + ": " + frameText);
+            }
 
             System.out.println();
 
@@ -264,22 +266,18 @@ public class MultipartSample {
     }
 
     /**
-     * Example 5: Non-blocking receive with the Result API.
+     * Example 5: Non-blocking receive with timeout.
      *
-     * <p>This is where the Result API truly shines! Demonstrates the key benefits:</p>
+     * <p>Demonstrates exception-based handling for non-blocking operations:</p>
      * <ul>
-     *   <li>Type-safe distinction between "would block" and success</li>
-     *   <li>Functional-style processing with ifPresent()</li>
-     *   <li>Explicit wouldBlock() checks for clarity</li>
-     *   <li>No null pointer risks</li>
+     *   <li>Setting RCVTIMEO to 0 for non-blocking mode</li>
+     *   <li>Catching ZmqException and checking isAgain() for EAGAIN</li>
+     *   <li>Type-safe error handling</li>
      * </ul>
-     *
-     * <p>Compare this to the old API which returned null for would-block,
-     * requiring null checks and lacking semantic clarity.</p>
      */
     private static void example5_TryRecvMultipart() {
-        System.out.println("Example 5: Result API for non-blocking receive");
-        System.out.println("------------------------------------------------");
+        System.out.println("Example 5: Non-blocking receive with timeout");
+        System.out.println("---------------------------------------------");
 
         try (Context ctx = new Context();
              Socket sender = new Socket(ctx, SocketType.PUSH);
@@ -287,6 +285,7 @@ public class MultipartSample {
 
             sender.setOption(SocketOption.LINGER, 0);
             receiver.setOption(SocketOption.LINGER, 0);
+            receiver.setOption(SocketOption.RCVTIMEO, 0); // Non-blocking mode
 
             receiver.bind("tcp://127.0.0.1:20005");
             sender.connect("tcp://127.0.0.1:20005");
@@ -294,14 +293,15 @@ public class MultipartSample {
             sleep(100);
 
             // Try to receive when no message is available
-            // NEW API: Returns RecvResult instead of nullable MultipartMessage
-            RecvResult<MultipartMessage> result1 = receiver.recvMultipart();
-
-            // Pattern 1: Use wouldBlock() for explicit checking
-            if (result1.wouldBlock()) {
-                System.out.println("First try: Would block (no message available)");
-            } else {
+            try {
+                MultipartMessage msg = receiver.recvMultipart().orElseThrow();
                 System.out.println("First try: Received message");
+            } catch (ZmqException ex) {
+                if (ex.isAgain()) {
+                    System.out.println("First try: Would block (no message available)");
+                } else {
+                    throw ex;
+                }
             }
 
             // Send a message
@@ -313,25 +313,22 @@ public class MultipartSample {
             sleep(50);
 
             // Try to receive when message is available
-            RecvResult<MultipartMessage> result2 = receiver.recvMultipart();
-
-            // Pattern 2: Use isPresent() for checking
-            System.out.println("Second try: " + (result2.isPresent() ? "Success" : "Would block"));
-
-            // Pattern 3: Functional-style processing with ifPresent()
-            // This is the recommended approach - clean and concise
-            result2.ifPresent(msg -> {
+            try {
+                MultipartMessage msg = receiver.recvMultipart().orElseThrow();
+                System.out.println("Second try: Success");
                 System.out.println("Received " + msg.size() + " frames:");
                 for (int i = 0; i < msg.size(); i++) {
                     String frameText = msg.getString(i);
                     System.out.println("  Frame " + (i + 1) + ": " + frameText);
                 }
-            });
-
-            // Pattern 4: You can also chain transformations with map()
-            RecvResult<Integer> frameCount = result2.map(MultipartMessage::size);
-            frameCount.ifPresent(count ->
-                System.out.println("Total frames in message: " + count));
+                System.out.println("Total frames in message: " + msg.size());
+            } catch (ZmqException ex) {
+                if (ex.isAgain()) {
+                    System.out.println("Second try: Would block");
+                } else {
+                    throw ex;
+                }
+            }
 
             System.out.println();
 
@@ -342,12 +339,12 @@ public class MultipartSample {
     }
 
     /**
-     * Example 6: Router-Dealer pattern with the new SendFlags API and Result API.
+     * Example 6: Router-Dealer pattern with SendFlags API.
      *
-     * <p>Demonstrates a complete request-reply cycle using modern APIs:</p>
+     * <p>Demonstrates a complete request-reply cycle:</p>
      * <ul>
      *   <li>SendFlags.SEND_MORE for multipart message construction</li>
-     *   <li>RecvResult with functional-style processing</li>
+     *   <li>Direct message reception without wrapper types</li>
      *   <li>Router socket identity envelope handling</li>
      * </ul>
      *
@@ -355,8 +352,8 @@ public class MultipartSample {
      * maintains connection identity and routes messages to specific Dealers.</p>
      */
     private static void example6_RouterDealerWithExtensions() {
-        System.out.println("Example 6: Router-Dealer with modern API");
-        System.out.println("-----------------------------------------");
+        System.out.println("Example 6: Router-Dealer pattern");
+        System.out.println("---------------------------------");
 
         try (Context ctx = new Context();
              Socket router = new Socket(ctx, SocketType.ROUTER);
@@ -377,50 +374,34 @@ public class MultipartSample {
             dealer.sendMultipart(request);
             System.out.println("Dealer sent: REQUEST, GetData");
 
-            // Router receives with Result API
-            RecvResult<MultipartMessage> requestResult = router.recvMultipart();
+            // Router receives multipart message
+            MultipartMessage receivedRequest = router.recvMultipart().orElseThrow();
+            System.out.println("Router received " + receivedRequest.size() + " frames:");
+            System.out.println("  Identity: " + receivedRequest.get(0).length + " bytes");
+            System.out.println("  Frame 1: " + receivedRequest.getString(1));
+            System.out.println("  Frame 2: " + receivedRequest.getString(2));
 
-            // Process the received request
-            requestResult.ifPresent(receivedRequest -> {
-                System.out.println("Router received " + receivedRequest.size() + " frames:");
-                System.out.println("  Identity: " + receivedRequest.get(0).length + " bytes");
-                System.out.println("  Frame 1: " + receivedRequest.getString(1));
-                System.out.println("  Frame 2: " + receivedRequest.getString(2));
-
-                // Router replies by echoing identity and adding response
-                // Using SendFlags.SEND_MORE for explicit frame control
-                byte[] identity = receivedRequest.get(0);
-
-                try {
-                    // NEW API: Use SendFlags.SEND_MORE instead of sendMore()
-                    router.send(identity, SendFlags.SEND_MORE);
-                    router.send("RESPONSE", SendFlags.SEND_MORE);
-                    router.send("DataPayload", SendFlags.NONE);
-                    System.out.println("Router replied with RESPONSE, DataPayload");
-                } catch (Exception e) {
-                    System.err.println("Error sending router reply: " + e.getMessage());
-                }
-            });
+            // Router replies by echoing identity and adding response
+            // Using SendFlags.SEND_MORE for explicit frame control
+            byte[] identity = receivedRequest.get(0);
+            router.send(identity, SendFlags.SEND_MORE);
+            router.send("RESPONSE", SendFlags.SEND_MORE);
+            router.send("DataPayload", SendFlags.NONE);
+            System.out.println("Router replied with RESPONSE, DataPayload");
 
             // Small delay to ensure router sends before dealer receives
             sleep(50);
 
             // Dealer receives response (identity stripped by Router)
-            RecvResult<MultipartMessage> responseResult = dealer.recvMultipart();
+            MultipartMessage responseMsg = dealer.recvMultipart().orElseThrow();
 
-            // Pattern: Chain map() and ifPresent() for transformation + action
-            responseResult
-                .map(msg -> {
-                    // Transform to a simple string representation
-                    StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < msg.size(); i++) {
-                        if (i > 0) sb.append(", ");
-                        sb.append(msg.getString(i));
-                    }
-                    return sb.toString();
-                })
-                .ifPresent(frames ->
-                    System.out.println("Dealer received response: " + frames));
+            // Build string representation
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < responseMsg.size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(responseMsg.getString(i));
+            }
+            System.out.println("Dealer received response: " + sb.toString());
 
             System.out.println();
 

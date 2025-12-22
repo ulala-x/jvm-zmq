@@ -149,13 +149,16 @@ public class PubSubSample {
             System.out.println("[Subscriber] Subscribed to 'weather' and 'news' topics");
 
             for (int i = 0; i < 10; i++) {
-                // With Result API, wouldBlock() is cleaner than catching exceptions
-                var result = socket.recvString();
-                if (result.wouldBlock()) {
-                    System.out.println("[Subscriber] Timeout, no message received");
-                    break;
+                try {
+                    String message = socket.recvString();
+                    System.out.println("[Subscriber] Received: " + message);
+                } catch (ZmqException ex) {
+                    if (ex.isAgain()) {
+                        System.out.println("[Subscriber] Timeout, no message received");
+                        break;
+                    }
+                    throw ex;
                 }
-                System.out.println("[Subscriber] Received: " + result.value());
             }
 
             System.out.println("[Subscriber] Done");

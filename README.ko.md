@@ -90,12 +90,10 @@ try (Context ctx = new Context();
      Socket server = new Socket(ctx, SocketType.REP)) {
     server.bind("tcp://*:5555");
 
-    // 블로킹 수신 - RecvResult 반환
-    RecvResult<String> result = server.recvString();
-    result.ifPresent(request -> {
-        System.out.println("Received: " + request);
-        server.send("World");
-    });
+    // 블로킹 수신
+    String request = server.recvString();
+    System.out.println("Received: " + request);
+    server.send("World");
 }
 
 // 클라이언트
@@ -103,16 +101,12 @@ try (Context ctx = new Context();
      Socket client = new Socket(ctx, SocketType.REQ)) {
     client.connect("tcp://localhost:5555");
 
-    // 송신은 SendResult 반환
-    SendResult sendResult = client.send("Hello");
-    sendResult.ifPresent(bytes ->
-        System.out.println("Sent " + bytes + " bytes")
-    );
+    // 송신은 boolean 반환 (true=성공, false=would block)
+    client.send("Hello");
 
-    // Result API로 수신
-    client.recvString().ifPresent(reply ->
-        System.out.println("Received: " + reply)
-    );
+    // 블로킹 수신
+    String reply = client.recvString();
+    System.out.println("Received: " + reply);
 }
 ```
 
@@ -134,10 +128,8 @@ try (Context ctx = new Context();
     sub.connect("tcp://localhost:5556");
     sub.subscribe("topic1");
 
-    // Result API로 수신
-    sub.recvString().ifPresent(message ->
-        System.out.println("Received: " + message)
-    );
+    String message = sub.recvString();
+    System.out.println("Received: " + message);
 }
 ```
 
@@ -162,19 +154,15 @@ try (Context ctx = new Context();
     peerB.send("PEER_A".getBytes(StandardCharsets.UTF_8), SendFlags.SEND_MORE);
     peerB.send("Hello from Peer B!");
 
-    // Peer A가 수신 (첫 번째 프레임 = 송신자 식별자) - Result API 사용
-    RecvResult<byte[]> senderIdResult = peerA.recvBytes();
-    RecvResult<String> messageResult = peerA.recvString();
+    // Peer A가 수신 (첫 번째 프레임 = 송신자 식별자)
+    byte[] senderId = new byte[256];
+    int idLen = peerA.recv(senderId, RecvFlags.NONE);
+    String message = peerA.recvString();
+    System.out.println("Received from peer: " + message);
 
-    if (senderIdResult.isPresent() && messageResult.isPresent()) {
-        byte[] senderId = senderIdResult.value();
-        String message = messageResult.value();
-        System.out.println("Received from peer: " + message);
-
-        // Peer A가 송신자의 식별자를 사용하여 응답
-        peerA.send(senderId, SendFlags.SEND_MORE);
-        peerA.send("Hello back from Peer A!");
-    }
+    // Peer A가 송신자의 식별자를 사용하여 응답
+    peerA.send(senderId, 0, idLen, SendFlags.SEND_MORE);
+    peerA.send("Hello back from Peer A!");
 }
 ```
 
@@ -194,7 +182,7 @@ try (Poller poller = new Poller()) {
 }
 ```
 
-### Result API를 사용한 논블로킹 I/O
+### 논블로킹 I/O
 
 ```java
 import io.github.ulalax.zmq.*;
@@ -203,22 +191,25 @@ try (Context ctx = new Context();
      Socket socket = new Socket(ctx, SocketType.DEALER)) {
     socket.connect("tcp://localhost:5555");
 
-    // 논블로킹 송신
-    SendResult sendResult = socket.send(data, SendFlags.DONT_WAIT);
-    if (sendResult.wouldBlock()) {
+    // 논블로킹 송신: would block이면 false 반환
+    boolean sent = socket.send(data, SendFlags.DONT_WAIT);
+    if (!sent) {
         System.out.println("Socket not ready - would block");
-    } else {
-        System.out.println("Sent " + sendResult.value() + " bytes");
     }
 
-    // 함수형 스타일의 논블로킹 수신
-    socket.recvString(RecvFlags.DONT_WAIT)
-        .ifPresent(msg -> System.out.println("Received: " + msg));
+    // 논블로킹 수신: would block이면 -1 반환
+    byte[] buffer = new byte[1024];
+    int bytes = socket.recv(buffer, RecvFlags.DONT_WAIT);
+    if (bytes == -1) {
+        System.out.println("No message available");
+    } else {
+        System.out.println("Received " + bytes + " bytes");
+    }
 
-    // 수신 데이터 변환
-    RecvResult<Integer> length = socket.recvBytes(RecvFlags.DONT_WAIT)
-        .map(bytes -> bytes.length);
-    length.ifPresent(len -> System.out.println("Length: " + len));
+    // Optional을 사용한 편의 메서드
+    socket.tryRecvString().ifPresent(msg ->
+        System.out.println("Received: " + msg)
+    );
 }
 ```
 
@@ -333,16 +324,20 @@ socket.connect("tcp://localhost:5555");
 socket.unbind("tcp://*:5555");
 socket.disconnect("tcp://localhost:5555");
 
-// 송신
-socket.send("Hello");
-socket.send(byteArray);
-socket.send(data, SendFlags.SEND_MORE);
-boolean sent = socket.trySend(data);
+// 송신 - boolean 반환 (true=성공, false=would block)
+socket.send("Hello");                           // 블로킹
+socket.send(byteArray);                         // 블로킹
+socket.send(data, SendFlags.SEND_MORE);         // 멀티파트
+socket.send(data, SendFlags.DONT_WAIT);         // 논블로킹
 
-// 수신
-String str = socket.recvString();
-byte[] data = socket.recvBytes();
-boolean received = socket.tryRecvString();
+// 수신 - int 반환 (수신 바이트 수, -1=would block)
+String str = socket.recvString();               // 블로킹
+int bytes = socket.recv(buffer, RecvFlags.NONE);      // 버퍼로
+int bytes = socket.recv(buffer, RecvFlags.DONT_WAIT); // 논블로킹
+
+// 편의 메서드
+socket.tryRecvString();                         // Optional<String>
+socket.tryRecv(buffer);                         // 논블로킹 버퍼 수신
 
 // 옵션
 socket.setOption(SocketOption.LINGER, 0);

@@ -90,12 +90,10 @@ try (Context ctx = new Context();
      Socket server = new Socket(ctx, SocketType.REP)) {
     server.bind("tcp://*:5555");
 
-    // Blocking receive - returns RecvResult
-    RecvResult<String> result = server.recvString();
-    result.ifPresent(request -> {
-        System.out.println("Received: " + request);
-        server.send("World");
-    });
+    // Blocking receive
+    String request = server.recvString();
+    System.out.println("Received: " + request);
+    server.send("World");
 }
 
 // Client
@@ -103,16 +101,12 @@ try (Context ctx = new Context();
      Socket client = new Socket(ctx, SocketType.REQ)) {
     client.connect("tcp://localhost:5555");
 
-    // Send returns SendResult
-    SendResult sendResult = client.send("Hello");
-    sendResult.ifPresent(bytes ->
-        System.out.println("Sent " + bytes + " bytes")
-    );
+    // Send returns boolean (true=success, false=would block)
+    client.send("Hello");
 
-    // Receive with Result API
-    client.recvString().ifPresent(reply ->
-        System.out.println("Received: " + reply)
-    );
+    // Blocking receive
+    String reply = client.recvString();
+    System.out.println("Received: " + reply);
 }
 ```
 
@@ -134,10 +128,8 @@ try (Context ctx = new Context();
     sub.connect("tcp://localhost:5556");
     sub.subscribe("topic1");
 
-    // Receive with Result API
-    sub.recvString().ifPresent(message ->
-        System.out.println("Received: " + message)
-    );
+    String message = sub.recvString();
+    System.out.println("Received: " + message);
 }
 ```
 
@@ -162,19 +154,15 @@ try (Context ctx = new Context();
     peerB.send("PEER_A".getBytes(StandardCharsets.UTF_8), SendFlags.SEND_MORE);
     peerB.send("Hello from Peer B!");
 
-    // Peer A receives (first frame = sender identity) - using Result API
-    RecvResult<byte[]> senderIdResult = peerA.recvBytes();
-    RecvResult<String> messageResult = peerA.recvString();
+    // Peer A receives (first frame = sender identity)
+    byte[] senderId = new byte[256];
+    int idLen = peerA.recv(senderId, RecvFlags.NONE);
+    String message = peerA.recvString();
+    System.out.println("Received from peer: " + message);
 
-    if (senderIdResult.isPresent() && messageResult.isPresent()) {
-        byte[] senderId = senderIdResult.value();
-        String message = messageResult.value();
-        System.out.println("Received from peer: " + message);
-
-        // Peer A replies using sender's identity
-        peerA.send(senderId, SendFlags.SEND_MORE);
-        peerA.send("Hello back from Peer A!");
-    }
+    // Peer A replies using sender's identity
+    peerA.send(senderId, 0, idLen, SendFlags.SEND_MORE);
+    peerA.send("Hello back from Peer A!");
 }
 ```
 
@@ -194,7 +182,7 @@ try (Poller poller = new Poller()) {
 }
 ```
 
-### Non-blocking I/O with Result API
+### Non-blocking I/O
 
 ```java
 import io.github.ulalax.zmq.*;
@@ -203,22 +191,25 @@ try (Context ctx = new Context();
      Socket socket = new Socket(ctx, SocketType.DEALER)) {
     socket.connect("tcp://localhost:5555");
 
-    // Non-blocking send
-    SendResult sendResult = socket.send(data, SendFlags.DONT_WAIT);
-    if (sendResult.wouldBlock()) {
+    // Non-blocking send: returns false if would block
+    boolean sent = socket.send(data, SendFlags.DONT_WAIT);
+    if (!sent) {
         System.out.println("Socket not ready - would block");
-    } else {
-        System.out.println("Sent " + sendResult.value() + " bytes");
     }
 
-    // Non-blocking receive with functional style
-    socket.recvString(RecvFlags.DONT_WAIT)
-        .ifPresent(msg -> System.out.println("Received: " + msg));
+    // Non-blocking receive: returns -1 if would block
+    byte[] buffer = new byte[1024];
+    int bytes = socket.recv(buffer, RecvFlags.DONT_WAIT);
+    if (bytes == -1) {
+        System.out.println("No message available");
+    } else {
+        System.out.println("Received " + bytes + " bytes");
+    }
 
-    // Transform received data
-    RecvResult<Integer> length = socket.recvBytes(RecvFlags.DONT_WAIT)
-        .map(bytes -> bytes.length);
-    length.ifPresent(len -> System.out.println("Length: " + len));
+    // Convenience method with Optional
+    socket.tryRecvString().ifPresent(msg ->
+        System.out.println("Received: " + msg)
+    );
 }
 ```
 
@@ -333,16 +324,20 @@ socket.connect("tcp://localhost:5555");
 socket.unbind("tcp://*:5555");
 socket.disconnect("tcp://localhost:5555");
 
-// Send
-socket.send("Hello");
-socket.send(byteArray);
-socket.send(data, SendFlags.SEND_MORE);
-boolean sent = socket.trySend(data);
+// Send - returns boolean (true=success, false=would block)
+socket.send("Hello");                           // blocking
+socket.send(byteArray);                         // blocking
+socket.send(data, SendFlags.SEND_MORE);         // multipart
+socket.send(data, SendFlags.DONT_WAIT);         // non-blocking
 
-// Receive
-String str = socket.recvString();
-byte[] data = socket.recvBytes();
-boolean received = socket.tryRecvString();
+// Receive - returns int (bytes received, -1=would block)
+String str = socket.recvString();               // blocking
+int bytes = socket.recv(buffer, RecvFlags.NONE);      // to buffer
+int bytes = socket.recv(buffer, RecvFlags.DONT_WAIT); // non-blocking
+
+// Convenience methods
+socket.tryRecvString();                         // Optional<String>
+socket.tryRecv(buffer);                         // non-blocking to buffer
 
 // Options
 socket.setOption(SocketOption.LINGER, 0);

@@ -264,7 +264,7 @@ public class RouterDealerSample {
 
                 // Receive reply: [empty][reply]
                 byte[] empty = recvBytes(socket);
-                String reply = socket.recvString().value();
+                String reply = socket.recvString();
                 System.out.println("[" + clientId + "] Received: " + reply);
 
                 sleep(500); // Simulate work
@@ -349,7 +349,9 @@ public class RouterDealerSample {
      * @return The received byte array
      */
     private static byte[] recvBytes(Socket socket) {
-        return socket.recvBytes().value();  // Extract from RecvResult in blocking mode
+        Message msg = new Message();
+        socket.recv(msg, RecvFlags.NONE);
+        return msg.toByteArray();
     }
 
     /**

@@ -108,7 +108,7 @@ public class InstancePollerSample {
 
                 // Check receiver 1 using index
                 if (poller.isReadable(idx1)) {
-                    String msg = receiver1.recvString().value();
+                    String msg = receiver1.recvString();
                     receiver1Count++;
                     System.out.println("[Receiver-1] (#" + receiver1Count + ") " + msg);
                     totalMessages++;
@@ -116,7 +116,7 @@ public class InstancePollerSample {
 
                 // Check receiver 2 using index
                 if (poller.isReadable(idx2)) {
-                    String msg = receiver2.recvString().value();
+                    String msg = receiver2.recvString();
                     receiver2Count++;
                     System.out.println("[Receiver-2] (#" + receiver2Count + ") " + msg);
                     totalMessages++;
