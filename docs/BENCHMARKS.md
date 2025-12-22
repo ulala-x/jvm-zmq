@@ -148,7 +148,7 @@ try (Message idMsg = new Message(router2Id);
 
 // Receiving
 try (Message msg = new Message()) {
-    socket.recv(msg, RecvFlags.NONE).value();
+    socket.recv(msg, RecvFlags.NONE);
     // Use msg.data() directly (no copy to managed memory)
 }
 ```
@@ -199,7 +199,7 @@ socket.send(payloadMsg, SendFlags.DONT_WAIT);
 byte[] recvBuffer = new byte[maxMessageSize];  // Allocate once at setup
 
 while (running) {
-    int size = socket.recv(recvBuffer, RecvFlags.NONE).value();
+    int size = socket.recv(recvBuffer, RecvFlags.NONE);
     // Process recvBuffer[0..size-1]
 }
 ```
@@ -273,8 +273,8 @@ Comparison of three receive strategies: Blocking, Poller, and NonBlocking.
 ```java
 while (n < messageCount) {
     // Blocking recv - thread waits until message arrives
-    socket.recv(identityBuffer, RecvFlags.NONE).value();
-    socket.recv(recvBuffer, RecvFlags.NONE).value();
+    socket.recv(identityBuffer, RecvFlags.NONE);
+    socket.recv(recvBuffer, RecvFlags.NONE);
     n++;
 }
 ```
@@ -298,8 +298,8 @@ int idx = poller.register(socket, PollEvents.IN);
 while (n < messageCount) {
     if (poller.poll(1000) > 0) {
         if (poller.isReadable(idx)) {
-            socket.recv(identityBuffer, RecvFlags.NONE).value();
-            socket.recv(recvBuffer, RecvFlags.NONE).value();
+            socket.recv(identityBuffer, RecvFlags.NONE);
+            socket.recv(recvBuffer, RecvFlags.NONE);
             n++;
         }
     }
@@ -322,12 +322,12 @@ while (n < messageCount) {
 #### 3. NonBlocking with Sleep ❌ NOT RECOMMENDED
 ```java
 while (n < messageCount) {
-    RecvResult<Integer> idResult = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
-    if (idResult.wouldBlock()) {
+    int bytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
+    if (bytes == -1) {  // Would block
         Thread.sleep(1); // Busy-wait with sleep
         continue;
     }
-    socket.recv(recvBuffer, RecvFlags.NONE).value();
+    socket.recv(recvBuffer, RecvFlags.NONE);
     n++;
 }
 ```

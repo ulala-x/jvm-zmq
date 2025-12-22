@@ -148,7 +148,7 @@ try (Message idMsg = new Message(router2Id);
 
 // 수신
 try (Message msg = new Message()) {
-    socket.recv(msg, RecvFlags.NONE).value();
+    socket.recv(msg, RecvFlags.NONE);
     // msg.data()를 직접 사용 (관리 메모리로 복사 없음)
 }
 ```
@@ -199,7 +199,7 @@ socket.send(payloadMsg, SendFlags.DONT_WAIT);
 byte[] recvBuffer = new byte[maxMessageSize];  // 설정 시 한 번만 할당
 
 while (running) {
-    int size = socket.recv(recvBuffer, RecvFlags.NONE).value();
+    int size = socket.recv(recvBuffer, RecvFlags.NONE);
     // recvBuffer[0..size-1] 처리
 }
 ```
@@ -273,8 +273,8 @@ Blocking, Poller, NonBlocking 세 가지 수신 전략 비교입니다.
 ```java
 while (n < messageCount) {
     // 블로킹 수신 - 메시지가 도착할 때까지 스레드 대기
-    socket.recv(identityBuffer, RecvFlags.NONE).value();
-    socket.recv(recvBuffer, RecvFlags.NONE).value();
+    socket.recv(identityBuffer, RecvFlags.NONE);
+    socket.recv(recvBuffer, RecvFlags.NONE);
     n++;
 }
 ```
@@ -298,8 +298,8 @@ int idx = poller.register(socket, PollEvents.IN);
 while (n < messageCount) {
     if (poller.poll(1000) > 0) {
         if (poller.isReadable(idx)) {
-            socket.recv(identityBuffer, RecvFlags.NONE).value();
-            socket.recv(recvBuffer, RecvFlags.NONE).value();
+            socket.recv(identityBuffer, RecvFlags.NONE);
+            socket.recv(recvBuffer, RecvFlags.NONE);
             n++;
         }
     }
@@ -322,12 +322,12 @@ while (n < messageCount) {
 #### 3. NonBlocking with Sleep ❌ NOT RECOMMENDED
 ```java
 while (n < messageCount) {
-    RecvResult<Integer> idResult = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
-    if (idResult.wouldBlock()) {
+    int bytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
+    if (bytes == -1) {  // Would block
         Thread.sleep(1); // sleep을 사용한 바쁜 대기
         continue;
     }
-    socket.recv(recvBuffer, RecvFlags.NONE).value();
+    socket.recv(recvBuffer, RecvFlags.NONE);
     n++;
 }
 ```
