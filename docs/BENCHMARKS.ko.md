@@ -398,8 +398,8 @@ while (n < messageCount) {
 
 ### 특정 벤치마크 실행
 ```bash
-# 메모리 전략만
-./gradlew :zmq:jmh -PjmhIncludes='.*MemoryStrategyBenchmark.*'
+# 메시지 버퍼 전략만
+./gradlew :zmq:jmh -PjmhIncludes='.*MessageBufferStrategyBenchmark.*'
 
 # 수신 모드만
 ./gradlew :zmq:jmh -PjmhIncludes='.*ReceiveModeBenchmark.*'

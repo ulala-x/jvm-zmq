@@ -57,7 +57,7 @@ def process_benchmark_type(data, benchmark_type):
 
     # Method display names (matching .NET)
     method_names = {
-        # MemoryStrategyBenchmark
+        # MessageBufferStrategyBenchmark
         'ByteArray_SendRecv': 'ByteArray_SendRecv',
         'ArrayPool_SendRecv': 'ArrayPool_SendRecv',
         'Message_SendRecv': 'Message_SendRecv',
@@ -72,7 +72,7 @@ def process_benchmark_type(data, benchmark_type):
     filtered_data = []
     for bench in data:
         benchmark_name = bench['benchmark']
-        if benchmark_type == 'memory' and 'MemoryStrategyBenchmark' in benchmark_name:
+        if benchmark_type == 'buffer' and 'MessageBufferStrategyBenchmark' in benchmark_name:
             filtered_data.append(bench)
         elif benchmark_type == 'receive' and 'ReceiveModeBenchmark' in benchmark_name:
             filtered_data.append(bench)
@@ -86,7 +86,7 @@ def process_benchmark_type(data, benchmark_type):
         benchmark_name = bench['benchmark']
 
         # Extract method name
-        if benchmark_type == 'memory':
+        if benchmark_type == 'buffer':
             name = benchmark_name.split('.')[-1]
         elif benchmark_type == 'receive':
             # ReceiveMode uses mode parameter instead of method name
@@ -131,7 +131,7 @@ def process_benchmark_type(data, benchmark_type):
 
     # Calculate baseline for each size (first method is baseline)
     baselines = {}
-    if benchmark_type == 'memory':
+    if benchmark_type == 'buffer':
         baseline_name = 'ByteArray_SendRecv'
     elif benchmark_type == 'receive':
         baseline_name = 'BLOCKING'
@@ -145,8 +145,8 @@ def process_benchmark_type(data, benchmark_type):
                 baselines[size] = results[baseline_key]
 
     # Print section header
-    if benchmark_type == 'memory':
-        print("\n## Memory Strategy Benchmarks\n")
+    if benchmark_type == 'buffer':
+        print("\n## Message Buffer Strategy Benchmarks\n")
     else:
         print("\n## Receive Mode Benchmarks\n")
 
@@ -294,5 +294,5 @@ print()
 print("```")
 
 # Process both benchmark types
-process_benchmark_type(data, 'memory')
+process_benchmark_type(data, 'buffer')
 process_benchmark_type(data, 'receive')

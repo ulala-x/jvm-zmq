@@ -3,7 +3,7 @@
 # ZMQ 벤치마크 실행 스크립트
 # 사용법:
 #   ./bench.sh all      - 모든 벤치마크 실행
-#   ./bench.sh memory   - MemoryStrategyBenchmark만 실행
+#   ./bench.sh buffer   - MessageBufferStrategyBenchmark만 실행
 #   ./bench.sh receive  - ReceiveModeBenchmark만 실행
 
 set -e
@@ -12,13 +12,13 @@ show_usage() {
     echo "사용법: $0 <옵션>"
     echo ""
     echo "옵션:"
-    echo "  all     - 모든 벤치마크 실행 (MemoryStrategy + ReceiveMode, ~30분)"
-    echo "  memory  - MemoryStrategyBenchmark만 실행 (~20분)"
+    echo "  all     - 모든 벤치마크 실행 (MessageBufferStrategy + ReceiveMode, ~30분)"
+    echo "  buffer  - MessageBufferStrategyBenchmark만 실행 (~20분)"
     echo "  receive - ReceiveModeBenchmark만 실행 (~10분)"
     echo ""
     echo "예시:"
     echo "  $0 all       # 전체 벤치마크"
-    echo "  $0 memory    # 메모리 전략 벤치마크만"
+    echo "  $0 buffer    # 메시지 버퍼 전략 벤치마크만"
     echo "  $0 receive   # Receive 모드 벤치마크만"
 }
 
@@ -43,7 +43,7 @@ case "$1" in
         echo "=================================="
         echo "전체 벤치마크 실행"
         echo "=================================="
-        echo "- MemoryStrategyBenchmark"
+        echo "- MessageBufferStrategyBenchmark"
         echo "- ReceiveModeBenchmark"
         echo "예상 시간: ~30분"
         echo ""
@@ -61,16 +61,16 @@ case "$1" in
         format_results
         ;;
 
-    memory)
+    buffer)
         echo "=================================="
-        echo "MemoryStrategyBenchmark 실행"
+        echo "MessageBufferStrategyBenchmark 실행"
         echo "=================================="
-        echo "테스트: ByteArray, NettyPool, Message, Zero-Copy"
-        echo "메시지 크기: 64, 1500, 65536 bytes"
+        echo "테스트: ByteArray, ArrayPool, Message, Zero-Copy"
+        echo "메시지 크기: 64, 512, 1024, 65536 bytes"
         echo "예상 시간: ~20분"
         echo ""
 
-        ./gradlew :zmq:jmh -PjmhIncludes=".*MemoryStrategyBenchmark.*"
+        ./gradlew :zmq:jmh -PjmhIncludes=".*MessageBufferStrategyBenchmark.*"
 
         format_results
         ;;

@@ -398,8 +398,8 @@ while (n < messageCount) {
 
 ### Run Specific Benchmark
 ```bash
-# Memory strategy only
-./gradlew :zmq:jmh -PjmhIncludes='.*MemoryStrategyBenchmark.*'
+# Message buffer strategy only
+./gradlew :zmq:jmh -PjmhIncludes='.*MessageBufferStrategyBenchmark.*'
 
 # Receive mode only
 ./gradlew :zmq:jmh -PjmhIncludes='.*ReceiveModeBenchmark.*'
