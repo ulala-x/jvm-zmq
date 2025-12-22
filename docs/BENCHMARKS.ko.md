@@ -225,51 +225,44 @@ while (running) {
 
 ## 수신 모드 벤치마크
 
-Blocking, Poller, NonBlocking 세 가지 수신 전략 비교입니다.
+PureBlocking, BlockingBatch, NonBlocking, Poller 네 가지 수신 전략 비교입니다.
 
 ### 성능 개요
 
-| Method                   | Size    | Throughput | Msg/sec | Mean      | Ratio | Allocated | Alloc Ratio |
-|------------------------- |--------:|------------|--------:|----------:|------:|----------:|------------:|
-| Blocking_RouterToRouter  |     64B | 735.17 Mbps |   1.44M |    6.96 ms |  1.00 |   5.34 MB |       1.00 |
-| NonBlocking_RouterToRouter |     64B | 699.81 Mbps |   1.37M |    7.32 ms |  1.05 |   5.34 MB |       1.00 |
-| Poller_RouterToRouter    |     64B | 730.11 Mbps |   1.43M |    7.01 ms |  1.01 |   5.34 MB |       1.00 |
-|                          |         |            |         |           |       |           |             |
-| Blocking_RouterToRouter  |    512B |  5.57 Gbps |   1.36M |    7.36 ms |  1.00 |   5.50 MB |       1.00 |
-| NonBlocking_RouterToRouter |    512B |  5.04 Gbps |   1.23M |    8.12 ms |  1.10 |   5.49 MB |       1.00 |
-| Poller_RouterToRouter    |    512B |  5.45 Gbps |   1.33M |    7.52 ms |  1.02 |   5.50 MB |       1.00 |
-|                          |         |            |         |           |       |           |             |
-| Blocking_RouterToRouter  |     1KB |  8.69 Gbps |   1.06M |    9.42 ms |  1.00 |   5.50 MB |       1.00 |
-| NonBlocking_RouterToRouter |     1KB |  8.00 Gbps | 976.90K |   10.24 ms |  1.09 |   5.49 MB |       1.00 |
-| Poller_RouterToRouter    |     1KB |  8.76 Gbps |   1.07M |    9.35 ms |  0.99 |   5.50 MB |       1.00 |
-|                          |         |            |         |           |       |           |             |
-| Blocking_RouterToRouter  |    64KB |  4.41 GB/s |  67.33K |  148.51 ms |  1.00 |   5.57 MB |       1.00 |
-| NonBlocking_RouterToRouter |    64KB |  2.23 GB/s |  34.10K |  293.29 ms |  1.97 |   5.50 MB |       0.99 |
-| Poller_RouterToRouter    |    64KB |  4.59 GB/s |  70.02K |  142.82 ms |  0.96 |   5.57 MB |       1.00 |
+| 모드 | 64B (msg/sec) | 512B (msg/sec) | 1KB (msg/sec) | 64KB (msg/sec) |
+|------|---------------|----------------|---------------|----------------|
+| **PureBlocking** | 1.48M | 1.36M | 1.10M | 70K |
+| **BlockingBatch** | 1.46M | 1.35M | 1.03M | 70K |
+| **NonBlocking** | 1.38M | 1.27M | 943K | 44K ❌ |
+| **Poller** | 1.48M | 1.34M | 1.10M | 68K |
 
-### Detailed Metrics
+### 상세 메트릭
 
-| Method                   | Size    | Score (ops/s) | Error      | StdDev    | Latency   | Gen0      |
-|------------------------- |--------:|--------------:|-----------:|----------:|----------:|----------:|
-| Blocking_RouterToRouter  |     64B |       143.59 |   0.0627 ms |   0.0146 ms | 696.43 ns |   55.0000 |
-| NonBlocking_RouterToRouter |     64B |       136.68 |   0.1011 ms |   0.0235 ms | 731.62 ns |   53.0000 |
-| Poller_RouterToRouter    |     64B |       142.60 |   0.1237 ms |   0.0287 ms | 701.27 ns |   55.0000 |
-|                          |         |               |            |           |           |           |
-| Blocking_RouterToRouter  |    512B |       135.92 |   0.1854 ms |   0.0431 ms | 735.75 ns |   52.0000 |
-| NonBlocking_RouterToRouter |    512B |       123.12 |   0.1267 ms |   0.0294 ms | 812.22 ns |   47.0000 |
-| Poller_RouterToRouter    |    512B |       132.97 |   0.1580 ms |   0.0367 ms | 752.05 ns |   50.0000 |
-|                          |         |               |            |           |           |           |
-| Blocking_RouterToRouter  |     1KB |       106.11 |   0.2328 ms |   0.0541 ms | 942.44 ns |   40.0000 |
-| NonBlocking_RouterToRouter |     1KB |        97.69 |   0.1830 ms |   0.0425 ms |   1.02 μs |   37.0000 |
-| Poller_RouterToRouter    |     1KB |       106.95 |   0.2135 ms |   0.0496 ms | 935.04 ns |   41.0000 |
-|                          |         |               |            |           |           |           |
-| Blocking_RouterToRouter  |    64KB |         6.73 |   3.1031 ms |   0.7208 ms |  14.85 μs |    2.0000 |
-| NonBlocking_RouterToRouter |    64KB |         3.41 |  12.4926 ms |   2.9018 ms |  29.33 μs |    2.0000 |
-| Poller_RouterToRouter    |    64KB |         7.00 |   2.2215 ms |   0.5160 ms |  14.28 μs |    2.0000 |
+| 모드 | 크기 | Score (ops/s) | 지연시간 |
+|------|------|---------------|---------|
+| PureBlocking | 64B | 147.79 | 0.68 μs |
+| BlockingBatch | 64B | 145.54 | 0.69 μs |
+| NonBlocking | 64B | 137.74 | 0.73 μs |
+| Poller | 64B | 147.88 | 0.68 μs |
+| | | | |
+| PureBlocking | 512B | 135.77 | 0.74 μs |
+| BlockingBatch | 512B | 135.17 | 0.74 μs |
+| NonBlocking | 512B | 126.58 | 0.79 μs |
+| Poller | 512B | 133.89 | 0.75 μs |
+| | | | |
+| PureBlocking | 1KB | 110.18 | 0.91 μs |
+| BlockingBatch | 1KB | 102.93 | 0.97 μs |
+| NonBlocking | 1KB | 94.31 | 1.06 μs |
+| Poller | 1KB | 110.04 | 0.91 μs |
+| | | | |
+| PureBlocking | 64KB | 6.98 | 14.33 μs |
+| BlockingBatch | 64KB | 7.02 | 14.25 μs |
+| NonBlocking | 64KB | 4.38 | 22.83 μs |
+| Poller | 64KB | 6.84 | 14.63 μs |
 
-### Mode Descriptions
+### 모드 설명
 
-#### 1. Blocking (Baseline)
+#### 1. PureBlocking (기준)
 ```java
 while (n < messageCount) {
     // 블로킹 수신 - 메시지가 도착할 때까지 스레드 대기
@@ -279,26 +272,60 @@ while (n < messageCount) {
 }
 ```
 
-**Characteristics:**
-- 메시지가 사용 가능할 때까지 스레드 Blocking
-- 가장 간단한 구현
-- **Best for**: 단일 소켓 애플리케이션
+**특징:**
+- 메시지가 사용 가능할 때까지 스레드 블로킹
+- 가장 간단한 구현, 메시지당 하나의 시스템 콜
+- **적합한 경우**: 단일 소켓 애플리케이션
 
-**Performance:**
-- 64B: 1.44M msg/sec
+**성능:**
+- 64B: 1.48M msg/sec
 - 512B: 1.36M msg/sec
-- 1KB: 1.06M msg/sec
-- 64KB: 67K msg/sec
+- 1KB: 1.10M msg/sec
+- 64KB: 70K msg/sec
 
-#### 2. Poller (Recommended for Multiple Sockets)
+#### 2. BlockingBatch (처리량 최적화)
 ```java
-Poller poller = new Poller();
-int idx = poller.register(socket, PollEvents.IN);
-
 while (n < messageCount) {
-    if (poller.poll(1000) > 0) {
-        if (poller.isReadable(idx)) {
-            socket.recv(identityBuffer, RecvFlags.NONE);
+    // 첫 번째 메시지: 블로킹 대기
+    socket.recv(identityBuffer, RecvFlags.NONE);
+    socket.recv(recvBuffer, RecvFlags.NONE);
+    n++;
+
+    // 가용 메시지 배치 수신 (시스템 콜 감소)
+    while (n < messageCount) {
+        int bytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
+        if (bytes == -1) break;  // 더 이상 없음 (EAGAIN)
+
+        socket.recv(recvBuffer, RecvFlags.NONE);
+        n++;
+    }
+}
+```
+
+**특징:**
+- 첫 번째 메시지는 블로킹 대기, 이후 논블로킹으로 배치 처리
+- 시스템 콜 오버헤드 감소
+- **적합한 경우**: 고처리량 단일 소켓 애플리케이션
+
+**성능:**
+- 64B: 1.46M msg/sec (PureBlocking 대비 99%)
+- 512B: 1.35M msg/sec (PureBlocking 대비 99%)
+- 1KB: 1.03M msg/sec (PureBlocking 대비 94%)
+- 64KB: 70K msg/sec (PureBlocking 대비 100%)
+
+#### 3. Poller (다중 소켓 권장)
+```java
+try (Poller poller = new Poller()) {
+    int idx = poller.register(socket, PollEvents.IN);
+
+    while (n < messageCount) {
+        poller.poll(-1);  // 이벤트 대기
+
+        // 가용 메시지 모두 배치 수신
+        while (n < messageCount) {
+            int bytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
+            if (bytes == -1) break;  // 더 이상 없음 (EAGAIN)
+
             socket.recv(recvBuffer, RecvFlags.NONE);
             n++;
         }
@@ -306,52 +333,61 @@ while (n < messageCount) {
 }
 ```
 
-**Characteristics:**
-- 이벤트 기반 I/O
+**특징:**
+- 배치 처리를 사용한 이벤트 기반 I/O
 - 여러 소켓 모니터링 가능
-- **Best for**: 다중 소켓 애플리케이션
+- **적합한 경우**: 다중 소켓 애플리케이션
 
-**Performance:**
-- 64B: 1.43M msg/sec (Blocking 대비 99%)
-- 512B: 1.33M msg/sec (Blocking 대비 98%)
-- 1KB: 1.07M msg/sec (Blocking 대비 101%)
-- 64KB: 70K msg/sec (Blocking 대비 104%)
+**성능:**
+- 64B: 1.48M msg/sec (PureBlocking 대비 100%)
+- 512B: 1.34M msg/sec (PureBlocking 대비 99%)
+- 1KB: 1.10M msg/sec (PureBlocking 대비 100%)
+- 64KB: 68K msg/sec (PureBlocking 대비 97%)
 
-**Verdict**: Poller는 Blocking과 동등하거나 더 나은 성능을 제공하며 다중 소켓 기능을 제공합니다.
+**결론**: Poller는 PureBlocking과 동등한 성능을 제공하면서 다중 소켓 기능을 지원합니다.
 
-#### 3. NonBlocking with Sleep ❌ NOT RECOMMENDED
+#### 4. NonBlocking with Sleep ❌ 사용 금지
 ```java
 while (n < messageCount) {
     int bytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
-    if (bytes == -1) {  // Would block
-        Thread.sleep(1); // sleep을 사용한 바쁜 대기
-        continue;
+    if (bytes != -1) {
+        socket.recv(recvBuffer, RecvFlags.DONT_WAIT);
+        n++;
+
+        // sleep 없이 배치 수신
+        while (n < messageCount) {
+            int batchBytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
+            if (batchBytes == -1) break;
+            socket.recv(recvBuffer, RecvFlags.DONT_WAIT);
+            n++;
+        }
+    } else {
+        Thread.sleep(1);  // 재시도 전 대기
     }
-    socket.recv(recvBuffer, RecvFlags.NONE);
-    n++;
 }
 ```
 
-**Characteristics:**
-- sleep 기반 재시도를 사용한 NonBlocking 수신
-- 비효율적인 CPU 사용
-- **Avoid in production**
+**특징:**
+- sleep 기반 재시도를 사용한 논블로킹 수신
+- sleep 오버헤드로 인한 비효율적인 CPU 사용
+- **프로덕션 사용 금지**
 
-**Performance:**
-- 64B: 1.37M msg/sec (Blocking 대비 95%)
-- 512B: 1.23M msg/sec (Blocking 대비 90%)
-- 1KB: 977K msg/sec (Blocking 대비 92%)
-- 64KB: 34K msg/sec (Blocking 대비 51%) ❌
+**성능:**
+- 64B: 1.38M msg/sec (PureBlocking 대비 93%)
+- 512B: 1.27M msg/sec (PureBlocking 대비 93%)
+- 1KB: 943K msg/sec (PureBlocking 대비 86%)
+- 64KB: 44K msg/sec (PureBlocking 대비 63%) ❌
 
-**Verdict**: 큰 메시지에서 현저히 나쁨. 대신 Poller를 사용하세요.
+**결론**: 큰 메시지에서 현저히 느림. 대신 Poller를 사용하세요.
 
-### Recommendations by Use Case
+### 사용 사례별 권장
 
-| Use Case | Recommended Mode | Reason |
-|----------|-----------------|--------|
-| Single socket | **Blocking** | 가장 간단, 오버헤드 없음 |
-| Multiple sockets | **Poller** | 이벤트 기반, Blocking과 동등한 성능 |
-| High-frequency polling | **Poller** | 바쁜 대기 오버헤드 방지 |
+| 사용 사례 | 권장 모드 | 이유 |
+|----------|----------|------|
+| 단일 소켓 (단순) | **PureBlocking** | 가장 간단, 오버헤드 없음 |
+| 단일 소켓 (고처리량) | **BlockingBatch** | 시스템 콜 감소 |
+| 다중 소켓 | **Poller** | 이벤트 기반, 다중 소켓 지원 |
+| 절대 사용 금지 | ~~NonBlocking~~ | sleep 오버헤드로 성능 저하 |
 
 ## 벤치마크 실행
 
@@ -395,10 +431,11 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
    - 매 수신마다 새 `byte[]` 할당 금지
    - 모든 전략에서 GC 압력 최소화를 위해 적용
 
-3. **수신 모드**:
-   - 단일 소켓: `Blocking` 사용 (가장 간단)
-   - 다중 소켓: `Poller` 사용 (Blocking 대비 98-104% 성능)
-   - ❌ sleep을 사용한 `NonBlocking` 사용 금지 (대형 메시지에서 2배 느림)
+3. **수신 모드** (4가지 전략 테스트):
+   - 단일 소켓 (단순): `PureBlocking` 사용 (가장 간단, 64B에서 1.48M msg/sec)
+   - 단일 소켓 (최적화): `BlockingBatch` 사용 (시스템 콜 감소)
+   - 다중 소켓: `Poller` 사용 (PureBlocking 대비 100% 성능, 다중 소켓 지원)
+   - ❌ sleep을 사용한 `NonBlocking` 절대 사용 금지 (대형 메시지에서 37% 느림)
 
 4. **GC 압력** (64KB 메시지 기준):
    - ArrayPool: 177KB (일정)

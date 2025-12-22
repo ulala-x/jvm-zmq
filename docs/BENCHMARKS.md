@@ -225,51 +225,44 @@ This practice is essential for minimizing GC pressure in high-throughput applica
 
 ## Receive Mode Benchmarks
 
-Comparison of three receive strategies: Blocking, Poller, and NonBlocking.
+Comparison of four receive strategies: PureBlocking, BlockingBatch, NonBlocking, and Poller.
 
 ### Performance Overview
 
-| Method                   | Size    | Throughput | Msg/sec | Mean      | Ratio | Allocated | Alloc Ratio |
-|------------------------- |--------:|------------|--------:|----------:|------:|----------:|------------:|
-| Blocking_RouterToRouter  |     64B | 735.17 Mbps |   1.44M |    6.96 ms |  1.00 |   5.34 MB |       1.00 |
-| NonBlocking_RouterToRouter |     64B | 699.81 Mbps |   1.37M |    7.32 ms |  1.05 |   5.34 MB |       1.00 |
-| Poller_RouterToRouter    |     64B | 730.11 Mbps |   1.43M |    7.01 ms |  1.01 |   5.34 MB |       1.00 |
-|                          |         |            |         |           |       |           |             |
-| Blocking_RouterToRouter  |    512B |  5.57 Gbps |   1.36M |    7.36 ms |  1.00 |   5.50 MB |       1.00 |
-| NonBlocking_RouterToRouter |    512B |  5.04 Gbps |   1.23M |    8.12 ms |  1.10 |   5.49 MB |       1.00 |
-| Poller_RouterToRouter    |    512B |  5.45 Gbps |   1.33M |    7.52 ms |  1.02 |   5.50 MB |       1.00 |
-|                          |         |            |         |           |       |           |             |
-| Blocking_RouterToRouter  |     1KB |  8.69 Gbps |   1.06M |    9.42 ms |  1.00 |   5.50 MB |       1.00 |
-| NonBlocking_RouterToRouter |     1KB |  8.00 Gbps | 976.90K |   10.24 ms |  1.09 |   5.49 MB |       1.00 |
-| Poller_RouterToRouter    |     1KB |  8.76 Gbps |   1.07M |    9.35 ms |  0.99 |   5.50 MB |       1.00 |
-|                          |         |            |         |           |       |           |             |
-| Blocking_RouterToRouter  |    64KB |  4.41 GB/s |  67.33K |  148.51 ms |  1.00 |   5.57 MB |       1.00 |
-| NonBlocking_RouterToRouter |    64KB |  2.23 GB/s |  34.10K |  293.29 ms |  1.97 |   5.50 MB |       0.99 |
-| Poller_RouterToRouter    |    64KB |  4.59 GB/s |  70.02K |  142.82 ms |  0.96 |   5.57 MB |       1.00 |
+| Mode | 64B (msg/sec) | 512B (msg/sec) | 1KB (msg/sec) | 64KB (msg/sec) |
+|------|---------------|----------------|---------------|----------------|
+| **PureBlocking** | 1.48M | 1.36M | 1.10M | 70K |
+| **BlockingBatch** | 1.46M | 1.35M | 1.03M | 70K |
+| **NonBlocking** | 1.38M | 1.27M | 943K | 44K ❌ |
+| **Poller** | 1.48M | 1.34M | 1.10M | 68K |
 
 ### Detailed Metrics
 
-| Method                   | Size    | Score (ops/s) | Error      | StdDev    | Latency   | Gen0      |
-|------------------------- |--------:|--------------:|-----------:|----------:|----------:|----------:|
-| Blocking_RouterToRouter  |     64B |       143.59 |   0.0627 ms |   0.0146 ms | 696.43 ns |   55.0000 |
-| NonBlocking_RouterToRouter |     64B |       136.68 |   0.1011 ms |   0.0235 ms | 731.62 ns |   53.0000 |
-| Poller_RouterToRouter    |     64B |       142.60 |   0.1237 ms |   0.0287 ms | 701.27 ns |   55.0000 |
-|                          |         |               |            |           |           |           |
-| Blocking_RouterToRouter  |    512B |       135.92 |   0.1854 ms |   0.0431 ms | 735.75 ns |   52.0000 |
-| NonBlocking_RouterToRouter |    512B |       123.12 |   0.1267 ms |   0.0294 ms | 812.22 ns |   47.0000 |
-| Poller_RouterToRouter    |    512B |       132.97 |   0.1580 ms |   0.0367 ms | 752.05 ns |   50.0000 |
-|                          |         |               |            |           |           |           |
-| Blocking_RouterToRouter  |     1KB |       106.11 |   0.2328 ms |   0.0541 ms | 942.44 ns |   40.0000 |
-| NonBlocking_RouterToRouter |     1KB |        97.69 |   0.1830 ms |   0.0425 ms |   1.02 μs |   37.0000 |
-| Poller_RouterToRouter    |     1KB |       106.95 |   0.2135 ms |   0.0496 ms | 935.04 ns |   41.0000 |
-|                          |         |               |            |           |           |           |
-| Blocking_RouterToRouter  |    64KB |         6.73 |   3.1031 ms |   0.7208 ms |  14.85 μs |    2.0000 |
-| NonBlocking_RouterToRouter |    64KB |         3.41 |  12.4926 ms |   2.9018 ms |  29.33 μs |    2.0000 |
-| Poller_RouterToRouter    |    64KB |         7.00 |   2.2215 ms |   0.5160 ms |  14.28 μs |    2.0000 |
+| Mode | Size | Score (ops/s) | Latency |
+|------|------|---------------|---------|
+| PureBlocking | 64B | 147.79 | 0.68 μs |
+| BlockingBatch | 64B | 145.54 | 0.69 μs |
+| NonBlocking | 64B | 137.74 | 0.73 μs |
+| Poller | 64B | 147.88 | 0.68 μs |
+| | | | |
+| PureBlocking | 512B | 135.77 | 0.74 μs |
+| BlockingBatch | 512B | 135.17 | 0.74 μs |
+| NonBlocking | 512B | 126.58 | 0.79 μs |
+| Poller | 512B | 133.89 | 0.75 μs |
+| | | | |
+| PureBlocking | 1KB | 110.18 | 0.91 μs |
+| BlockingBatch | 1KB | 102.93 | 0.97 μs |
+| NonBlocking | 1KB | 94.31 | 1.06 μs |
+| Poller | 1KB | 110.04 | 0.91 μs |
+| | | | |
+| PureBlocking | 64KB | 6.98 | 14.33 μs |
+| BlockingBatch | 64KB | 7.02 | 14.25 μs |
+| NonBlocking | 64KB | 4.38 | 22.83 μs |
+| Poller | 64KB | 6.84 | 14.63 μs |
 
 ### Mode Descriptions
 
-#### 1. Blocking (Baseline)
+#### 1. PureBlocking (Baseline)
 ```java
 while (n < messageCount) {
     // Blocking recv - thread waits until message arrives
@@ -281,24 +274,58 @@ while (n < messageCount) {
 
 **Characteristics:**
 - Thread blocks until message available
-- Simplest implementation
+- Simplest implementation, one syscall per message
 - **Best for**: Single socket applications
 
 **Performance:**
-- 64B: 1.44M msg/sec
+- 64B: 1.48M msg/sec
 - 512B: 1.36M msg/sec
-- 1KB: 1.06M msg/sec
-- 64KB: 67K msg/sec
+- 1KB: 1.10M msg/sec
+- 64KB: 70K msg/sec
 
-#### 2. Poller (Recommended for Multiple Sockets)
+#### 2. BlockingBatch (Optimized Throughput)
 ```java
-Poller poller = new Poller();
-int idx = poller.register(socket, PollEvents.IN);
-
 while (n < messageCount) {
-    if (poller.poll(1000) > 0) {
-        if (poller.isReadable(idx)) {
-            socket.recv(identityBuffer, RecvFlags.NONE);
+    // First message: blocking wait
+    socket.recv(identityBuffer, RecvFlags.NONE);
+    socket.recv(recvBuffer, RecvFlags.NONE);
+    n++;
+
+    // Batch receive available messages (reduces syscalls)
+    while (n < messageCount) {
+        int bytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
+        if (bytes == -1) break;  // No more available (EAGAIN)
+
+        socket.recv(recvBuffer, RecvFlags.NONE);
+        n++;
+    }
+}
+```
+
+**Characteristics:**
+- First message uses blocking wait, then batch-processes with non-blocking recv
+- Reduces syscall overhead
+- **Best for**: High-throughput single socket applications
+
+**Performance:**
+- 64B: 1.46M msg/sec (99% of PureBlocking)
+- 512B: 1.35M msg/sec (99% of PureBlocking)
+- 1KB: 1.03M msg/sec (94% of PureBlocking)
+- 64KB: 70K msg/sec (100% of PureBlocking)
+
+#### 3. Poller (Recommended for Multiple Sockets)
+```java
+try (Poller poller = new Poller()) {
+    int idx = poller.register(socket, PollEvents.IN);
+
+    while (n < messageCount) {
+        poller.poll(-1);  // Wait for events
+
+        // Batch receive all available messages
+        while (n < messageCount) {
+            int bytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
+            if (bytes == -1) break;  // No more available (EAGAIN)
+
             socket.recv(recvBuffer, RecvFlags.NONE);
             n++;
         }
@@ -307,41 +334,49 @@ while (n < messageCount) {
 ```
 
 **Characteristics:**
-- Event-driven I/O
+- Event-driven I/O with batch processing
 - Can monitor multiple sockets
 - **Best for**: Multi-socket applications
 
 **Performance:**
-- 64B: 1.43M msg/sec (99% of Blocking)
-- 512B: 1.33M msg/sec (98% of Blocking)
-- 1KB: 1.07M msg/sec (101% of Blocking)
-- 64KB: 70K msg/sec (104% of Blocking)
+- 64B: 1.48M msg/sec (100% of PureBlocking)
+- 512B: 1.34M msg/sec (99% of PureBlocking)
+- 1KB: 1.10M msg/sec (100% of PureBlocking)
+- 64KB: 68K msg/sec (97% of PureBlocking)
 
-**Verdict**: Poller matches or exceeds Blocking performance while providing multi-socket capability.
+**Verdict**: Poller matches PureBlocking performance while providing multi-socket capability.
 
-#### 3. NonBlocking with Sleep ❌ NOT RECOMMENDED
+#### 4. NonBlocking with Sleep ❌ NOT RECOMMENDED
 ```java
 while (n < messageCount) {
     int bytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
-    if (bytes == -1) {  // Would block
-        Thread.sleep(1); // Busy-wait with sleep
-        continue;
+    if (bytes != -1) {
+        socket.recv(recvBuffer, RecvFlags.DONT_WAIT);
+        n++;
+
+        // Batch receive without sleep
+        while (n < messageCount) {
+            int batchBytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
+            if (batchBytes == -1) break;
+            socket.recv(recvBuffer, RecvFlags.DONT_WAIT);
+            n++;
+        }
+    } else {
+        Thread.sleep(1);  // Wait before retry
     }
-    socket.recv(recvBuffer, RecvFlags.NONE);
-    n++;
 }
 ```
 
 **Characteristics:**
 - Non-blocking recv with sleep-based retry
-- Inefficient CPU usage
+- Inefficient CPU usage due to sleep overhead
 - **Avoid in production**
 
 **Performance:**
-- 64B: 1.37M msg/sec (95% of Blocking)
-- 512B: 1.23M msg/sec (90% of Blocking)
-- 1KB: 977K msg/sec (92% of Blocking)
-- 64KB: 34K msg/sec (51% of Blocking) ❌
+- 64B: 1.38M msg/sec (93% of PureBlocking)
+- 512B: 1.27M msg/sec (93% of PureBlocking)
+- 1KB: 943K msg/sec (86% of PureBlocking)
+- 64KB: 44K msg/sec (63% of PureBlocking) ❌
 
 **Verdict**: Significantly worse for large messages. Use Poller instead.
 
@@ -349,9 +384,10 @@ while (n < messageCount) {
 
 | Use Case | Recommended Mode | Reason |
 |----------|-----------------|--------|
-| Single socket | **Blocking** | Simplest, no overhead |
-| Multiple sockets | **Poller** | Event-driven, matches Blocking performance |
-| High-frequency polling | **Poller** | Avoid busy-wait overhead |
+| Single socket (simple) | **PureBlocking** | Simplest, no overhead |
+| Single socket (high throughput) | **BlockingBatch** | Reduces syscalls |
+| Multiple sockets | **Poller** | Event-driven, multi-socket support |
+| Never use | ~~NonBlocking~~ | Sleep overhead degrades performance |
 
 ## Running Benchmarks
 
@@ -395,10 +431,11 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
    - Avoid allocating new `byte[]` for each receive operation
    - This applies to all strategies for minimizing GC pressure
 
-3. **Receive Mode**:
-   - Single socket: Use `Blocking` (simplest)
-   - Multiple sockets: Use `Poller` (98-104% of Blocking performance)
-   - ❌ **Never use** `NonBlocking` with sleep (2x slower for large messages)
+3. **Receive Mode** (4 strategies tested):
+   - Single socket (simple): Use `PureBlocking` (simplest, 1.48M msg/sec @ 64B)
+   - Single socket (optimized): Use `BlockingBatch` (reduces syscalls)
+   - Multiple sockets: Use `Poller` (100% of PureBlocking performance, multi-socket support)
+   - ❌ **Never use** `NonBlocking` with sleep (37% slower for large messages)
 
 4. **GC Pressure** (at 64KB messages):
    - ArrayPool: 177KB (constant)
