@@ -40,9 +40,8 @@ class PairTest {
                 socket1.send("Hello from Socket1");
 
                 // Then: Socket2 receives the message
-                byte[] received1 = socket2.recvBytes().value();
-                assertThat(received1).isNotNull();
-                assertThat(new String(received1, StandardCharsets.UTF_8))
+                String received1 = socket2.recvString();
+                assertThat(received1)
                         .as("Message from Socket1")
                         .isEqualTo("Hello from Socket1");
 
@@ -50,9 +49,8 @@ class PairTest {
                 socket2.send("Hello from Socket2");
 
                 // Then: Socket1 receives the reply
-                byte[] received2 = socket1.recvBytes().value();
-                assertThat(received2).isNotNull();
-                assertThat(new String(received2, StandardCharsets.UTF_8))
+                String received2 = socket1.recvString();
+                assertThat(received2)
                         .as("Message from Socket2")
                         .isEqualTo("Hello from Socket2");
             }
@@ -79,15 +77,13 @@ class PairTest {
                 socket2.send("From 2 to 1");
 
                 // Then: Both should receive messages
-                byte[] msg1 = socket2.recvBytes().value();
-                byte[] msg2 = socket1.recvBytes().value();
+                String msg1 = socket2.recvString();
+                String msg2 = socket1.recvString();
 
-                assertThat(msg1).isNotNull();
-                assertThat(msg2).isNotNull();
-                assertThat(new String(msg1, StandardCharsets.UTF_8))
+                assertThat(msg1)
                         .as("Socket2 received from Socket1")
                         .isEqualTo("From 1 to 2");
-                assertThat(new String(msg2, StandardCharsets.UTF_8))
+                assertThat(msg2)
                         .as("Socket1 received from Socket2")
                         .isEqualTo("From 2 to 1");
             }
@@ -116,11 +112,10 @@ class PairTest {
 
                 // When: Send messages between the pair
                 socket1.send("Exclusive message");
-                byte[] received = socket2.recvBytes().value();
+                String received = socket2.recvString();
 
                 // Then: Communication should work
-                assertThat(received).isNotNull();
-                assertThat(new String(received, StandardCharsets.UTF_8))
+                assertThat(received)
                         .as("Exclusive pair message")
                         .isEqualTo("Exclusive message");
 
@@ -156,9 +151,9 @@ class PairTest {
 
                 // Then: Should receive in the same order
                 for (int i = 0; i < 5; i++) {
-                    byte[] received = receiver.recvBytes().value();
+                    String received = receiver.recvString();
                     assertThat(received).isNotNull();
-                    assertThat(new String(received, StandardCharsets.UTF_8))
+                    assertThat(received)
                             .as("Message order #" + i)
                             .isEqualTo("Message-" + i);
                 }
@@ -189,7 +184,7 @@ class PairTest {
 
                 // Then: All messages should be received in order
                 for (int i = 0; i < messageCount; i++) {
-                    byte[] received = receiver.recvBytes().value();
+                    String received = receiver.recvString();
                     assertThat(received)
                             .as("Rapid message #" + i + " received")
                             .isNotNull();
@@ -225,7 +220,11 @@ class PairTest {
                 socket1.send(binaryData);
 
                 // Then: Should receive exact binary data
-                byte[] received = socket2.recvBytes().value();
+                byte[] receivedBuffer = new byte[256];
+                int receivedBytes = socket2.recv(receivedBuffer);
+                byte[] received = new byte[receivedBytes];
+                System.arraycopy(receivedBuffer, 0, received, 0, receivedBytes);
+
                 assertThat(received)
                         .as("Binary data integrity")
                         .isEqualTo(binaryData);
@@ -255,7 +254,11 @@ class PairTest {
                 socket1.send(largeData);
 
                 // Then: Should receive complete data
-                byte[] received = socket2.recvBytes().value();
+                byte[] receivedBuffer = new byte[2 * 1024 * 1024];
+                int receivedBytes = socket2.recv(receivedBuffer);
+                byte[] received = new byte[receivedBytes];
+                System.arraycopy(receivedBuffer, 0, received, 0, receivedBytes);
+
                 assertThat(received)
                         .as("Large data size")
                         .hasSize(largeData.length);
@@ -340,7 +343,7 @@ class PairTest {
                 socket1.send("Test");
 
                 // Then: Should receive successfully
-                byte[] received = socket2.recvBytes().value();
+                String received = socket2.recvString();
                 assertThat(received).isNotNull();
             }
         }
@@ -364,7 +367,7 @@ class PairTest {
                 socket1.send("Test");
 
                 // Then: Should receive successfully
-                byte[] received = socket2.recvBytes().value();
+                String received = socket2.recvString();
                 assertThat(received).isNotNull();
             }
         }
@@ -393,7 +396,7 @@ class PairTest {
                 socket1.send("");
 
                 // Then: Should receive empty message
-                byte[] received = socket2.recvBytes().value();
+                String received = socket2.recvString();
                 assertThat(received)
                         .as("Empty message")
                         .isNotNull()
@@ -421,9 +424,9 @@ class PairTest {
                 socket1.send(specialMsg);
 
                 // Then: Should receive with all characters preserved
-                byte[] received = socket2.recvBytes().value();
+                String received = socket2.recvString();
                 assertThat(received).isNotNull();
-                assertThat(new String(received, StandardCharsets.UTF_8))
+                assertThat(received)
                         .as("Special characters preservation")
                         .isEqualTo(specialMsg);
             }
@@ -441,12 +444,12 @@ class PairTest {
 
                 // When: Try to receive with no data
                 byte[] buffer = new byte[256];
-                RecvResult<Integer> bytesReceived = socket.recv(buffer, RecvFlags.DONT_WAIT);
+                int bytesReceived = socket.recv(buffer, RecvFlags.DONT_WAIT);
 
-                // Then: Should timeout and return empty result (would block)
-                assertThat(bytesReceived.wouldBlock())
+                // Then: Should timeout and return -1 (EAGAIN)
+                assertThat(bytesReceived)
                         .as("Receive timeout result")
-                        .isTrue();
+                        .isEqualTo(-1);
             }
         }
     }
@@ -472,11 +475,11 @@ class PairTest {
 
                 // When: Exchange messages
                 socket1.send("tcp test");
-                byte[] received = socket2.recvBytes().value();
+                String received = socket2.recvString();
 
                 // Then: Should work correctly
                 assertThat(received).isNotNull();
-                assertThat(new String(received, StandardCharsets.UTF_8))
+                assertThat(received)
                         .isEqualTo("tcp test");
             }
         }
@@ -497,11 +500,11 @@ class PairTest {
 
                 // When: Exchange messages
                 socket1.send("tcp test");
-                byte[] received = socket2.recvBytes().value();
+                String received = socket2.recvString();
 
                 // Then: Should work correctly
                 assertThat(received).isNotNull();
-                assertThat(new String(received, StandardCharsets.UTF_8))
+                assertThat(received)
                         .isEqualTo("tcp test");
             }
         }

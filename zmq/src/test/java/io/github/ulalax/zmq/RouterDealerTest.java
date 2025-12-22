@@ -96,8 +96,8 @@ class RouterDealerTest {
                         router.send(reply, SendFlags.NONE);
 
                         // DEALER receives reply
-                        byte[] response = dealer.recvBytes().value();
-                        assertThat(new String(response, StandardCharsets.UTF_8))
+                        String response = dealer.recvString();
+                        assertThat(response)
                                 .as("DEALER received response")
                                 .isEqualTo("Response");
                     }
@@ -215,13 +215,13 @@ class RouterDealerTest {
                 }
 
                 // Then: Each dealer receives correct reply
-                byte[] resp1 = dealer1.recvBytes().value();
-                byte[] resp2 = dealer2.recvBytes().value();
+                String resp1 = dealer1.recvString();
+                String resp2 = dealer2.recvString();
 
-                assertThat(new String(resp1, StandardCharsets.UTF_8))
+                assertThat(resp1)
                         .as("DEALER1 response")
                         .isEqualTo("Response to DEALER1");
-                assertThat(new String(resp2, StandardCharsets.UTF_8))
+                assertThat(resp2)
                         .as("DEALER2 response")
                         .isEqualTo("Response to DEALER2");
             }
@@ -347,8 +347,8 @@ class RouterDealerTest {
                     }
 
                     // Worker receives and processes
-                    byte[] workRequest = worker.recvBytes().value();
-                    assertThat(new String(workRequest, StandardCharsets.UTF_8))
+                    String workRequest = worker.recvString();
+                    assertThat(workRequest)
                             .isEqualTo("Client request");
 
                     // Worker sends reply
@@ -370,8 +370,8 @@ class RouterDealerTest {
                             broker.send(respMsg, SendFlags.NONE);
 
                             // Client receives response
-                            byte[] clientResp = client.recvBytes().value();
-                            assertThat(new String(clientResp, StandardCharsets.UTF_8))
+                            String clientResp = client.recvString();
+                            assertThat(clientResp)
                                     .as("Client received worker response")
                                     .isEqualTo("Worker response");
                         }

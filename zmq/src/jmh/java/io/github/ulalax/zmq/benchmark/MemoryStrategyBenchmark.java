@@ -48,7 +48,7 @@ public class MemoryStrategyBenchmark {
         volatile boolean receiverError = false;
         volatile Exception receiverException;
 
-        @Param({"64", "512","1024", "65536"})
+        @Param({"64", "512", "1024", "65536", "131072", "262144"})
         int messageSize;
 
         @Param({"10000"})
@@ -101,12 +101,9 @@ public class MemoryStrategyBenchmark {
             reusableRecvBuffer = new byte[messageSize];  // 현재 메시지 크기에 맞춤
 
             // === PooledByteBufAllocator Pre-warming ===
-            // Pre-warm for all three message sizes (64, 1500, 65536)
-            // to eliminate lazy initialization overhead in benchmark iterations
-            int[] allMessageSizes = {64, 1500, 65536};
-            warmupByteBufAllocator(
-                    allMessageSizes
-            );
+            // Pre-warm for all message sizes to eliminate lazy initialization overhead
+            int[] allMessageSizes = {64, 512, 1024, 65536, 131072, 262144};
+            warmupByteBufAllocator(allMessageSizes);
         }
 
         @TearDown(Level.Trial)
@@ -162,6 +159,7 @@ public class MemoryStrategyBenchmark {
             long elapsedMs = (System.nanoTime() - startTime) / 1_000_000;
             System.out.println("Pre-warming completed in " + elapsedMs + "ms");
             System.out.println("===========================================\n");
+
         }
     }
 
@@ -172,12 +170,11 @@ public class MemoryStrategyBenchmark {
 
         Thread receiver = new Thread(() -> {
             try {
-                int n = 0;
-
-                while (n < state.messageCount) {
-                    // First message: blocking wait
-                    state.router2.recv(state.identityBuffer, RecvFlags.NONE).value();
-                    int size = state.router2.recv(state.recvBuffer, RecvFlags.NONE).value();
+                for (int n = 0; n < state.messageCount; n++) {
+                    // Receive identity
+                    state.router2.recv(state.identityBuffer, RecvFlags.NONE);
+                    // Receive payload
+                    int size = state.router2.recv(state.recvBuffer, RecvFlags.NONE);
 
                     // Simulate external delivery: allocate new array (GC pressure!)
                     byte[] outputBuffer = new byte[size];
@@ -185,23 +182,6 @@ public class MemoryStrategyBenchmark {
                     // External consumer would use outputBuffer here
 
                     state.receiverLatch.countDown();
-                    n++;
-
-                    // Batch receive available messages (reduces syscalls)
-                    while (n < state.messageCount) {
-                        RecvResult<Integer> idResult = state.router2.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                        if (idResult.wouldBlock()) break;  // No more available
-
-                        size = state.router2.recv(state.recvBuffer, RecvFlags.NONE).value();
-
-                        // Simulate external delivery: create new output buffer (GC pressure!)
-                        outputBuffer = new byte[size];
-                        System.arraycopy(state.recvBuffer, 0, outputBuffer, 0, size);
-                        // External consumer would use outputBuffer here
-
-                        state.receiverLatch.countDown();
-                        n++;
-                    }
                 }
             } catch (Exception e) {
                 state.receiverError = true;
@@ -234,12 +214,11 @@ public class MemoryStrategyBenchmark {
 
         Thread receiver = new Thread(() -> {
             try {
-                int n = 0;
-
-                while (n < state.messageCount) {
-                    // First message: blocking wait
-                    state.router2.recv(state.identityBuffer, RecvFlags.NONE).value();
-                    int size = state.router2.recv(state.recvBuffer, RecvFlags.NONE).value();
+                for (int n = 0; n < state.messageCount; n++) {
+                    // Receive identity
+                    state.router2.recv(state.identityBuffer, RecvFlags.NONE);
+                    // Receive payload
+                    int size = state.router2.recv(state.recvBuffer, RecvFlags.NONE);
 
                     // Simulate external delivery: rent from pool (minimal GC!)
                     ByteBuf outputBuf = allocator.buffer(size);
@@ -252,28 +231,6 @@ public class MemoryStrategyBenchmark {
                     }
 
                     state.receiverLatch.countDown();
-                    n++;
-
-                    // Batch receive available messages (reduces syscalls)
-                    while (n < state.messageCount) {
-                        RecvResult<Integer> idResult = state.router2.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                        if (idResult.wouldBlock()) break;  // No more available
-
-                        size = state.router2.recv(state.recvBuffer, RecvFlags.NONE).value();
-
-                        // Simulate external delivery: rent from pool (minimal GC!)
-                        outputBuf = allocator.buffer(size);
-                        try {
-                            outputBuf.writeBytes(state.recvBuffer, 0, size);
-                            // ✅ 재사용 버퍼로 복사 (외부 소비자가 사용)
-                            outputBuf.getBytes(0, state.reusableRecvBuffer, 0, size);
-                        } finally {
-                            outputBuf.release();
-                        }
-
-                        state.receiverLatch.countDown();
-                        n++;
-                    }
                 }
             } catch (Exception e) {
                 state.receiverError = true;
@@ -293,6 +250,7 @@ public class MemoryStrategyBenchmark {
                     // ✅ 재사용 버퍼 사용 (매번 할당 안 함!)
                     sendBuf.getBytes(0, state.reusableSendBuffer, 0, state.messageSize);
                     state.router1.send(state.reusableSendBuffer, SendFlags.DONT_WAIT);
+
                 } finally {
                     sendBuf.release();
                 }
@@ -311,35 +269,17 @@ public class MemoryStrategyBenchmark {
 
         Thread receiver = new Thread(() -> {
             try {
-                int n = 0;
-
-                while (n < state.messageCount) {
-                    // First message: blocking wait
-                    state.router2.recv(state.identityBuffer, RecvFlags.NONE).value();
+                for (int n = 0; n < state.messageCount; n++) {
+                    // Receive identity
+                    state.router2.recv(state.identityBuffer, RecvFlags.NONE);
+                    // Receive payload as Message
                     try (Message msg = new Message()) {
-                        state.router2.recv(msg, RecvFlags.NONE).value();
+                        state.router2.recv(msg, RecvFlags.NONE);
                         // Use msg.data() directly (no copy to managed memory)
                         // External consumer would use msg.data() here
                     }
 
                     state.receiverLatch.countDown();
-                    n++;
-
-                    // Batch receive available messages (reduces syscalls)
-                    while (n < state.messageCount) {
-                        RecvResult<Integer> idResult = state.router2.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                        if (idResult.wouldBlock()) break;  // No more available
-
-                        // Receive into Message (native memory allocation)
-                        try (Message msg = new Message()) {
-                            state.router2.recv(msg, RecvFlags.NONE).value();
-                            // Use msg.data() directly (no copy to managed memory)
-                            // External consumer would use msg.data() here
-                        }
-
-                        state.receiverLatch.countDown();
-                        n++;
-                    }
                 }
             } catch (Exception e) {
                 state.receiverError = true;
@@ -370,35 +310,17 @@ public class MemoryStrategyBenchmark {
 
         Thread receiver = new Thread(() -> {
             try {
-                int n = 0;
-
-                while (n < state.messageCount) {
-                    // First message: blocking wait
-                    state.router2.recv(state.identityBuffer, RecvFlags.NONE).value();
+                for (int n = 0; n < state.messageCount; n++) {
+                    // Receive identity
+                    state.router2.recv(state.identityBuffer, RecvFlags.NONE);
+                    // Receive payload as Message (zero-copy from ZMQ side)
                     try (Message msg = new Message()) {
-                        state.router2.recv(msg, RecvFlags.NONE).value();
+                        state.router2.recv(msg, RecvFlags.NONE);
                         // Use msg.data() directly (no copy to managed memory)
                         // External consumer would use msg.data() here
                     }
 
                     state.receiverLatch.countDown();
-                    n++;
-
-                    // Batch receive available messages (reduces syscalls)
-                    while (n < state.messageCount) {
-                        RecvResult<Integer> idResult = state.router2.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                        if (idResult.wouldBlock()) break;  // No more available
-
-                        // Receive into Message (already zero-copy from ZMQ side)
-                        try (Message msg = new Message()) {
-                            state.router2.recv(msg, RecvFlags.NONE).value();
-                            // Use msg.data() directly (no copy to managed memory)
-                            // External consumer would use msg.data() here
-                        }
-
-                        state.receiverLatch.countDown();
-                        n++;
-                    }
                 }
             } catch (Exception e) {
                 state.receiverError = true;

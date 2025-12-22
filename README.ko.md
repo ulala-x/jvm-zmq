@@ -7,16 +7,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![API Documentation](https://img.shields.io/badge/API-Documentation-blue)](https://ulala-x.github.io/jvm-zmq/)
 
-JDK 22+ FFM (Foreign Function & Memory) API를 사용하는 현대적인 ZeroMQ (libzmq) Java 바인딩입니다.
+JDK 22+ FFM (Foreign Function & Memory) API를 사용하는 현대적인 ZeroMQ (libzmq) Java binding입니다.
 
 ## 기능
 
-- **Java 22 FFM API**: 안정적인 Foreign Function & Memory API를 사용하여 JNI 오버헤드 없이 네이티브 라이브러리를 직접 바인딩
-- **타입 안전 API**: 강력한 타입의 열거형(enum), 소켓(Socket) 옵션, 메시지(Message) 처리
-- **리소스 안전**: Cleaner 기반 자동 파이널라이제이션을 갖춘 AutoCloseable 리소스
-- **크로스 플랫폼**: Windows, Linux, macOS (x86_64 및 ARM64)용 번들 네이티브 라이브러리
-- **완전한 ZMQ 지원**: CURVE 보안을 포함한 모든 소켓 타입, 패턴 및 고급 기능
-- **네이티브 의존성 제로**: 런타임 시 네이티브 libzmq 라이브러리가 자동으로 추출 및 로드
+- **Java 22 FFM API**: 안정적인 Foreign Function & Memory API를 사용하여 JNI overhead 없이 native 라이브러리를 직접 binding
+- **Type-safe API**: 강력한 type의 enum, Socket option, Message 처리
+- **Resource 안전**: Cleaner 기반 자동 finalization을 갖춘 AutoCloseable resource
+- **Cross-platform**: Windows, Linux, macOS (x86_64 및 ARM64)용 번들 native 라이브러리
+- **완전한 ZMQ 지원**: CURVE 보안을 포함한 모든 socket type, pattern 및 고급 기능
+- **Native 의존성 제로**: runtime 시 native libzmq 라이브러리가 자동으로 추출 및 로드
 
 ## 설치
 

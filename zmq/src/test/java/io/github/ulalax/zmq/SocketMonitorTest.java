@@ -47,10 +47,13 @@ class SocketMonitorTest {
                     client.connect("tcp://127.0.0.1:15750");
 
                     // Then: Monitor should receive a Connected event with the correct address
-                    byte[] eventFrame = monitor.recvBytes().value();
-                    String addressFrame = monitor.recvString().value();
+                    byte[] eventFrame = new byte[256];
+                    int eventBytes = monitor.recv(eventFrame);
+                    String addressFrame = monitor.recvString();
 
-                    SocketMonitorEventData eventData = SocketMonitorEventData.parse(eventFrame, addressFrame);
+                    byte[] actualEventFrame = new byte[eventBytes];
+                    System.arraycopy(eventFrame, 0, actualEventFrame, 0, eventBytes);
+                    SocketMonitorEventData eventData = SocketMonitorEventData.parse(actualEventFrame, addressFrame);
                     assertThat(eventData.event())
                             .as("Event type should be Connected")
                             .isEqualTo(SocketMonitorEvent.CONNECTED);
@@ -82,9 +85,13 @@ class SocketMonitorTest {
                     server.bind("tcp://127.0.0.1:15752");
 
                     // Receive Listening event first
-                    byte[] listeningEventFrame = monitor.recvBytes().value();
-                    String listeningAddressFrame = monitor.recvString().value();
-                    SocketMonitorEventData listeningEvent = SocketMonitorEventData.parse(listeningEventFrame, listeningAddressFrame);
+                    byte[] listeningEventFrame = new byte[256];
+                    int listeningEventBytes = monitor.recv(listeningEventFrame);
+                    String listeningAddressFrame = monitor.recvString();
+
+                    byte[] actualListeningEventFrame = new byte[listeningEventBytes];
+                    System.arraycopy(listeningEventFrame, 0, actualListeningEventFrame, 0, listeningEventBytes);
+                    SocketMonitorEventData listeningEvent = SocketMonitorEventData.parse(actualListeningEventFrame, listeningAddressFrame);
                     assertThat(listeningEvent.event())
                             .as("First event should be Listening")
                             .isEqualTo(SocketMonitorEvent.LISTENING);
@@ -94,10 +101,13 @@ class SocketMonitorTest {
                     Thread.sleep(100); // Allow connection to establish
 
                     // Then: Monitor should receive an Accepted event
-                    byte[] acceptedEventFrame = monitor.recvBytes().value();
-                    String acceptedAddressFrame = monitor.recvString().value();
+                    byte[] acceptedEventFrame = new byte[256];
+                    int acceptedEventBytes = monitor.recv(acceptedEventFrame);
+                    String acceptedAddressFrame = monitor.recvString();
 
-                    SocketMonitorEventData eventData = SocketMonitorEventData.parse(acceptedEventFrame, acceptedAddressFrame);
+                    byte[] actualAcceptedEventFrame = new byte[acceptedEventBytes];
+                    System.arraycopy(acceptedEventFrame, 0, actualAcceptedEventFrame, 0, acceptedEventBytes);
+                    SocketMonitorEventData eventData = SocketMonitorEventData.parse(actualAcceptedEventFrame, acceptedAddressFrame);
                     assertThat(eventData.event())
                             .as("Event type should be Accepted")
                             .isEqualTo(SocketMonitorEvent.ACCEPTED);
@@ -136,10 +146,13 @@ class SocketMonitorTest {
                     server.bind("tcp://127.0.0.1:15751");
 
                     // Then: Monitor should receive a Listening event with the correct address
-                    byte[] eventFrame = monitor.recvBytes().value();
-                    String addressFrame = monitor.recvString().value();
+                    byte[] eventFrame = new byte[256];
+                    int eventBytes = monitor.recv(eventFrame);
+                    String addressFrame = monitor.recvString();
 
-                    SocketMonitorEventData eventData = SocketMonitorEventData.parse(eventFrame, addressFrame);
+                    byte[] actualEventFrame = new byte[eventBytes];
+                    System.arraycopy(eventFrame, 0, actualEventFrame, 0, eventBytes);
+                    SocketMonitorEventData eventData = SocketMonitorEventData.parse(actualEventFrame, addressFrame);
                     assertThat(eventData.event())
                             .as("Event type should be Listening")
                             .isEqualTo(SocketMonitorEvent.LISTENING);
@@ -180,9 +193,13 @@ class SocketMonitorTest {
                     server.bind("tcp://127.0.0.1:15755");
 
                     // Receive Listening event
-                    byte[] listeningEventFrame = monitor.recvBytes().value();
-                    String listeningAddressFrame = monitor.recvString().value();
-                    SocketMonitorEventData listeningEvent = SocketMonitorEventData.parse(listeningEventFrame, listeningAddressFrame);
+                    byte[] listeningEventFrame = new byte[256];
+                    int listeningEventBytes = monitor.recv(listeningEventFrame);
+                    String listeningAddressFrame = monitor.recvString();
+
+                    byte[] actualListeningEventFrame = new byte[listeningEventBytes];
+                    System.arraycopy(listeningEventFrame, 0, actualListeningEventFrame, 0, listeningEventBytes);
+                    SocketMonitorEventData listeningEvent = SocketMonitorEventData.parse(actualListeningEventFrame, listeningAddressFrame);
                     assertThat(listeningEvent.event())
                             .as("First event should be Listening")
                             .isEqualTo(SocketMonitorEvent.LISTENING);
@@ -194,9 +211,13 @@ class SocketMonitorTest {
                         Thread.sleep(100); // Allow connection to establish
 
                         // Receive Accepted event
-                        byte[] acceptedEventFrame = monitor.recvBytes().value();
-                        String acceptedAddressFrame = monitor.recvString().value();
-                        SocketMonitorEventData acceptedEvent = SocketMonitorEventData.parse(acceptedEventFrame, acceptedAddressFrame);
+                        byte[] acceptedEventFrame = new byte[256];
+                        int acceptedEventBytes = monitor.recv(acceptedEventFrame);
+                        String acceptedAddressFrame = monitor.recvString();
+
+                        byte[] actualAcceptedEventFrame = new byte[acceptedEventBytes];
+                        System.arraycopy(acceptedEventFrame, 0, actualAcceptedEventFrame, 0, acceptedEventBytes);
+                        SocketMonitorEventData acceptedEvent = SocketMonitorEventData.parse(actualAcceptedEventFrame, acceptedAddressFrame);
                         assertThat(acceptedEvent.event())
                                 .as("Second event should be Accepted")
                                 .isEqualTo(SocketMonitorEvent.ACCEPTED);
@@ -211,9 +232,13 @@ class SocketMonitorTest {
                     SocketMonitorEventData eventData = null;
                     for (int i = 0; i < 5; i++) {
                         try {
-                            byte[] eventFrame = monitor.recvBytes().value();
-                            String addressFrame = monitor.recvString().value();
-                            SocketMonitorEventData data = SocketMonitorEventData.parse(eventFrame, addressFrame);
+                            byte[] eventFrame = new byte[256];
+                            int eventBytes = monitor.recv(eventFrame);
+                            String addressFrame = monitor.recvString();
+
+                            byte[] actualEventFrame = new byte[eventBytes];
+                            System.arraycopy(eventFrame, 0, actualEventFrame, 0, eventBytes);
+                            SocketMonitorEventData data = SocketMonitorEventData.parse(actualEventFrame, addressFrame);
 
                             if (data.event() == SocketMonitorEvent.DISCONNECTED) {
                                 eventData = data;
@@ -267,10 +292,13 @@ class SocketMonitorTest {
                     client.connect("tcp://127.0.0.1:15753");
 
                     // Then: Should receive Connected event
-                    byte[] eventFrame = monitor.recvBytes().value();
-                    String addressFrame = monitor.recvString().value();
+                    byte[] eventFrame = new byte[256];
+                    int eventBytes = monitor.recv(eventFrame);
+                    String addressFrame = monitor.recvString();
 
-                    SocketMonitorEventData eventData = SocketMonitorEventData.parse(eventFrame, addressFrame);
+                    byte[] actualEventFrame = new byte[eventBytes];
+                    System.arraycopy(eventFrame, 0, actualEventFrame, 0, eventBytes);
+                    SocketMonitorEventData eventData = SocketMonitorEventData.parse(actualEventFrame, addressFrame);
                     assertThat(eventData.event())
                             .as("Should receive Connected event")
                             .isEqualTo(SocketMonitorEvent.CONNECTED);
@@ -279,12 +307,13 @@ class SocketMonitorTest {
                     client.close();
 
                     // Then: Should NOT receive Disconnected event because it's filtered out
-                    // With Result API, the recv will return empty result (would block) on timeout
-                    RecvResult<byte[]> result = monitor.recvBytes();
+                    // With new API, tryRecv will return -1 (EAGAIN) on timeout
+                    byte[] tempBuffer = new byte[256];
+                    int result = monitor.tryRecv(tempBuffer);
 
-                    assertThat(result.wouldBlock())
+                    assertThat(result)
                             .as("No Disconnected event should be received due to filtering")
-                            .isTrue();
+                            .isEqualTo(-1);
                 }
             }
         }
@@ -316,9 +345,13 @@ class SocketMonitorTest {
                     server.bind("tcp://127.0.0.1:15754");
 
                     // Receive initial Listening event
-                    byte[] listeningEventFrame = monitor.recvBytes().value();
-                    String listeningAddressFrame = monitor.recvString().value();
-                    SocketMonitorEventData listeningEvent = SocketMonitorEventData.parse(listeningEventFrame, listeningAddressFrame);
+                    byte[] listeningEventFrame = new byte[256];
+                    int listeningEventBytes = monitor.recv(listeningEventFrame);
+                    String listeningAddressFrame = monitor.recvString();
+
+                    byte[] actualListeningEventFrame = new byte[listeningEventBytes];
+                    System.arraycopy(listeningEventFrame, 0, actualListeningEventFrame, 0, listeningEventBytes);
+                    SocketMonitorEventData listeningEvent = SocketMonitorEventData.parse(actualListeningEventFrame, listeningAddressFrame);
                     assertThat(listeningEvent.event())
                             .as("First event should be Listening")
                             .isEqualTo(SocketMonitorEvent.LISTENING);
@@ -327,10 +360,13 @@ class SocketMonitorTest {
                     server.stopMonitor();
 
                     // Then: Monitor should receive a MonitorStopped event
-                    byte[] stoppedEventFrame = monitor.recvBytes().value();
-                    String stoppedAddressFrame = monitor.recvString().value();
+                    byte[] stoppedEventFrame = new byte[256];
+                    int stoppedEventBytes = monitor.recv(stoppedEventFrame);
+                    String stoppedAddressFrame = monitor.recvString();
 
-                    SocketMonitorEventData eventData = SocketMonitorEventData.parse(stoppedEventFrame, stoppedAddressFrame);
+                    byte[] actualStoppedEventFrame = new byte[stoppedEventBytes];
+                    System.arraycopy(stoppedEventFrame, 0, actualStoppedEventFrame, 0, stoppedEventBytes);
+                    SocketMonitorEventData eventData = SocketMonitorEventData.parse(actualStoppedEventFrame, stoppedAddressFrame);
                     assertThat(eventData.event())
                             .as("Event type should be MonitorStopped")
                             .isEqualTo(SocketMonitorEvent.MONITOR_STOPPED);

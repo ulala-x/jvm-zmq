@@ -7,6 +7,7 @@ import java.lang.foreign.ValueLayout;
 import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 
 /**
  * ZeroMQ socket. NOT thread-safe (except for special thread-safe sockets).
@@ -14,12 +15,11 @@ import java.nio.charset.StandardCharsets;
  * <p>Sockets are the building blocks of ZMQ messaging. Each socket has a type
  * that determines its behavior and which other socket types it can communicate with.</p>
  *
- * <p>This API uses {@link SendResult} and {@link RecvResult} to distinguish between
- * successful operations, would-block (EAGAIN) conditions, and real errors:</p>
+ * <p>This API follows .NET ZMQ style with simple return values:</p>
  * <ul>
- *   <li><b>Success</b> - Operation completed, result contains value</li>
- *   <li><b>Would Block</b> - Operation cannot complete without blocking (empty result)</li>
- *   <li><b>Error</b> - Real ZMQ error occurred (throws {@link ZmqException})</li>
+ *   <li><b>Send</b> - Returns {@code boolean} (true=success, false=EAGAIN)</li>
+ *   <li><b>Recv</b> - Returns {@code int} (bytes received, -1=EAGAIN)</li>
+ *   <li><b>Errors</b> - Real ZMQ errors throw {@link ZmqException}</li>
  * </ul>
  *
  * <p>Usage:</p>
@@ -29,12 +29,12 @@ import java.nio.charset.StandardCharsets;
  *     socket.bind("tcp://*:5555");
  *
  *     // Blocking receive
- *     RecvResult<String> result = socket.recvString();
- *     result.ifPresent(msg -> System.out.println("Received: " + msg));
+ *     String msg = socket.recvString();
+ *     System.out.println("Received: " + msg);
  *
  *     // Non-blocking send
- *     SendResult sendResult = socket.send("Reply", SendFlags.DONT_WAIT);
- *     if (sendResult.wouldBlock()) {
+ *     boolean sent = socket.send("Reply", SendFlags.DONT_WAIT);
+ *     if (!sent) {
  *         System.out.println("Would block - retry later");
  *     }
  * }
@@ -42,8 +42,6 @@ import java.nio.charset.StandardCharsets;
  *
  * @see SocketType
  * @see SocketOption
- * @see SendResult
- * @see RecvResult
  */
 public final class Socket implements AutoCloseable {
 
@@ -78,9 +76,8 @@ public final class Socket implements AutoCloseable {
     private int recvBufferUsageCount = 0;
     private long recvBufferTotalUsed = 0;
 
-    // Reusable Message objects to avoid allocations on EAGAIN
-    private Message recvMessage;       // Reusable for tryRecvBytes()
-    private Message recvStringMessage;  // Reusable for tryRecvString()
+    // Reusable Message object for recvString
+    private Message recvStringMessage;  // Reusable for recvString()
 
     /**
      * Creates a new ZMQ socket.
@@ -104,8 +101,7 @@ public final class Socket implements AutoCloseable {
         this.sendBuffer = ioArena.allocate(sendBufferSize);
         this.recvBuffer = ioArena.allocate(recvBufferSize);
 
-        // Initialize reusable Message objects
-        this.recvMessage = new Message();
+        // Initialize reusable Message object
         this.recvStringMessage = new Message();
     }
 
@@ -200,29 +196,25 @@ public final class Socket implements AutoCloseable {
     /**
      * Sends data on the socket.
      *
-     * <p>This method sends data and returns a {@link SendResult} that indicates whether
-     * the operation succeeded, would block (EAGAIN), or failed with an error.</p>
-     *
      * @param data The data to send
      * @param flags Send flags (e.g., {@link SendFlags#DONT_WAIT} for non-blocking)
-     * @return SendResult containing bytes sent on success, or empty if would block
+     * @return {@code true} if sent successfully, {@code false} if would block (EAGAIN)
      * @throws NullPointerException if data is null
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      *
      * <p><b>Example:</b></p>
      * <pre>{@code
-     * SendResult result = socket.send(data, SendFlags.DONT_WAIT);
-     * if (result.isPresent()) {
-     *     System.out.println("Sent " + result.value() + " bytes");
-     * } else if (result.wouldBlock()) {
+     * boolean sent = socket.send(data, SendFlags.DONT_WAIT);
+     * if (sent) {
+     *     System.out.println("Data sent successfully");
+     * } else {
      *     System.out.println("Would block - retry later");
      * }
      * }</pre>
      *
-     * @see SendResult
      * @see SendFlags
      */
-    public SendResult send(byte[] data, SendFlags flags) {
+    public boolean send(byte[] data, SendFlags flags) {
         if (data == null) {
             throw new NullPointerException("data cannot be null");
         }
@@ -236,9 +228,9 @@ public final class Socket implements AutoCloseable {
         if (result == -1) {
             int errno = LibZmq.errno();
             if (errno == ZmqConstants.EAGAIN) {
-                return SendResult.empty();
+                return false;  // Would block
             }
-            throw new ZmqException(errno);
+            throw new ZmqException(errno);  // Real error
         }
 
         // Track buffer usage for adaptive sizing
@@ -256,16 +248,16 @@ public final class Socket implements AutoCloseable {
             sendBufferTotalUsed = 0;
         }
 
-        return SendResult.success(result);
+        return true;
     }
 
     /**
      * Sends data on the socket with default flags.
      * @param data The data to send
-     * @return SendResult containing bytes sent on success, or empty if would block
+     * @return {@code true} if sent successfully, {@code false} if would block (EAGAIN)
      * @see #send(byte[], SendFlags)
      */
-    public SendResult send(byte[] data) {
+    public boolean send(byte[] data) {
         return send(data, SendFlags.NONE);
     }
 
@@ -273,12 +265,12 @@ public final class Socket implements AutoCloseable {
      * Sends a UTF-8 string on the socket.
      * @param text The text to send
      * @param flags Send flags
-     * @return SendResult containing bytes sent on success, or empty if would block
+     * @return {@code true} if sent successfully, {@code false} if would block (EAGAIN)
      * @throws NullPointerException if text is null
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      * @see #send(byte[], SendFlags)
      */
-    public SendResult send(String text, SendFlags flags) {
+    public boolean send(String text, SendFlags flags) {
         if (text == null) {
             throw new NullPointerException("text cannot be null");
         }
@@ -289,10 +281,10 @@ public final class Socket implements AutoCloseable {
     /**
      * Sends a UTF-8 string on the socket with default flags.
      * @param text The text to send
-     * @return SendResult containing bytes sent on success, or empty if would block
+     * @return {@code true} if sent successfully, {@code false} if would block (EAGAIN)
      * @see #send(String, SendFlags)
      */
-    public SendResult send(String text) {
+    public boolean send(String text) {
         return send(text, SendFlags.NONE);
     }
 
@@ -300,11 +292,11 @@ public final class Socket implements AutoCloseable {
      * Sends a ByteBuffer on the socket.
      * @param buffer The buffer to send
      * @param flags Send flags
-     * @return SendResult containing bytes sent on success, or empty if would block
+     * @return {@code true} if sent successfully, {@code false} if would block (EAGAIN)
      * @throws NullPointerException if buffer is null
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      */
-    public SendResult send(ByteBuffer buffer, SendFlags flags) {
+    public boolean send(ByteBuffer buffer, SendFlags flags) {
         if (buffer == null) {
             throw new NullPointerException("buffer cannot be null");
         }
@@ -318,9 +310,9 @@ public final class Socket implements AutoCloseable {
             if (result == -1) {
                 int errno = LibZmq.errno();
                 if (errno == ZmqConstants.EAGAIN) {
-                    return SendResult.empty();
+                    return false;  // Would block
                 }
-                throw new ZmqException(errno);
+                throw new ZmqException(errno);  // Real error
             }
             buffer.position(buffer.position() + result);
         } else {
@@ -334,32 +326,32 @@ public final class Socket implements AutoCloseable {
             if (result == -1) {
                 int errno = LibZmq.errno();
                 if (errno == ZmqConstants.EAGAIN) {
-                    return SendResult.empty();
+                    return false;  // Would block
                 }
-                throw new ZmqException(errno);
+                throw new ZmqException(errno);  // Real error
             }
             buffer.position(buffer.position() + result);
         }
-        return SendResult.success(result);
+        return true;
     }
 
     /**
      * Sends a message on the socket.
      * @param message The message to send
      * @param flags Send flags
-     * @return SendResult containing bytes sent on success, or empty if would block
+     * @return {@code true} if sent successfully, {@code false} if would block (EAGAIN)
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      */
-    public SendResult send(Message message, SendFlags flags) {
+    public boolean send(Message message, SendFlags flags) {
         int result = message.send(getHandle(), flags);
         if (result == -1) {
             int errno = LibZmq.errno();
             if (errno == ZmqConstants.EAGAIN) {
-                return SendResult.empty();
+                return false;  // Would block
             }
-            throw new ZmqException(errno);
+            throw new ZmqException(errno);  // Real error
         }
-        return SendResult.success(result);
+        return true;
     }
 
 
@@ -368,31 +360,26 @@ public final class Socket implements AutoCloseable {
     /**
      * Receives data into a buffer.
      *
-     * <p>This method receives data and returns a {@link RecvResult} that indicates whether
-     * the operation succeeded, would block (EAGAIN), or failed with an error.</p>
-     *
      * @param buffer The buffer to receive into
      * @param flags Receive flags (e.g., {@link RecvFlags#DONT_WAIT} for non-blocking)
-     * @return RecvResult containing bytes received on success, or empty if would block
+     * @return Number of bytes received, or {@code -1} if would block (EAGAIN)
      * @throws NullPointerException if buffer is null
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      *
      * <p><b>Example:</b></p>
      * <pre>{@code
      * byte[] buffer = new byte[256];
-     * RecvResult<Integer> result = socket.recv(buffer, RecvFlags.DONT_WAIT);
-     * if (result.isPresent()) {
-     *     int bytesRead = result.value();
+     * int bytesRead = socket.recv(buffer, RecvFlags.DONT_WAIT);
+     * if (bytesRead > 0) {
      *     System.out.println("Received " + bytesRead + " bytes");
-     * } else if (result.wouldBlock()) {
+     * } else if (bytesRead == -1) {
      *     System.out.println("No data available");
      * }
      * }</pre>
      *
-     * @see RecvResult
      * @see RecvFlags
      */
-    public RecvResult<Integer> recv(byte[] buffer, RecvFlags flags) {
+    public int recv(byte[] buffer, RecvFlags flags) {
         if (buffer == null) {
             throw new NullPointerException("buffer cannot be null");
         }
@@ -405,9 +392,9 @@ public final class Socket implements AutoCloseable {
         if (result == -1) {
             int errno = LibZmq.errno();
             if (errno == ZmqConstants.EAGAIN) {
-                return RecvResult.empty();
+                return -1;  // Would block
             }
-            throw new ZmqException(errno);
+            throw new ZmqException(errno);  // Real error
         }
         MemorySegment.copy(recvBuffer, ValueLayout.JAVA_BYTE, 0, buffer, 0, result);
 
@@ -426,16 +413,16 @@ public final class Socket implements AutoCloseable {
             recvBufferTotalUsed = 0;
         }
 
-        return RecvResult.success(result);
+        return result;
     }
 
     /**
-     * Receives data into a buffer with default flags.
+     * Receives data into a buffer with default flags (blocking).
      * @param buffer The buffer to receive into
-     * @return RecvResult containing bytes received on success, or empty if would block
+     * @return Number of bytes received, or {@code -1} if would block (EAGAIN)
      * @see #recv(byte[], RecvFlags)
      */
-    public RecvResult<Integer> recv(byte[] buffer) {
+    public int recv(byte[] buffer) {
         return recv(buffer, RecvFlags.NONE);
     }
 
@@ -443,100 +430,78 @@ public final class Socket implements AutoCloseable {
      * Receives a message.
      * @param message The message to receive into
      * @param flags Receive flags
-     * @return RecvResult containing bytes received on success, or empty if would block
+     * @return Number of bytes received, or {@code -1} if would block (EAGAIN)
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      */
-    public RecvResult<Integer> recv(Message message, RecvFlags flags) {
+    public int recv(Message message, RecvFlags flags) {
         int result = message.recv(getHandle(), flags);
         if (result == -1) {
             int errno = LibZmq.errno();
             if (errno == ZmqConstants.EAGAIN) {
-                return RecvResult.empty();
+                return -1;  // Would block
             }
-            throw new ZmqException(errno);
+            throw new ZmqException(errno);  // Real error
         }
-        return RecvResult.success(result);
+        return result;
     }
 
+
     /**
-     * Receives data as a new byte array.
+     * Receives a UTF-8 string (blocking).
      *
-     * <p>This method uses reusable internal {@link Message} buffer for optimal performance.</p>
+     * <p>This method uses reusable internal {@link Message} buffer for optimal performance.
+     * This method blocks until a message is received.</p>
      *
-     * @param flags Receive flags
-     * @return RecvResult containing received byte array on success, or empty if would block
-     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     * @return The received string
+     * @throws ZmqException if a real ZMQ error occurs
      *
      * <p><b>Example:</b></p>
      * <pre>{@code
-     * RecvResult<byte[]> result = socket.recvBytes(RecvFlags.DONT_WAIT);
-     * result.ifPresent(data -> {
-     *     System.out.println("Received " + data.length + " bytes");
-     *     processData(data);
-     * });
+     * String msg = socket.recvString();
+     * System.out.println("Message: " + msg);
      * }</pre>
      */
-    public RecvResult<byte[]> recvBytes(RecvFlags flags) {
-        recvMessage.rebuild();
-        int result = LibZmq.msgRecv(recvMessage.msgSegment, getHandle(), flags.getValue());
+    public String recvString() {
+        recvStringMessage.rebuild();
+        int result = LibZmq.msgRecv(recvStringMessage.msgSegment, getHandle(), RecvFlags.NONE.getValue());
         if (result == -1) {
             int errno = LibZmq.errno();
-            if (errno == ZmqConstants.EAGAIN) {
-                return RecvResult.empty();
-            }
-            throw new ZmqException(errno);
+            throw new ZmqException(errno);  // Real error
         }
-        return RecvResult.success(recvMessage.toByteArray());
+        return recvStringMessage.toString();
     }
 
     /**
-     * Receives data as a new byte array with default flags.
-     * @return RecvResult containing received byte array on success, or empty if would block
-     * @see #recvBytes(RecvFlags)
-     */
-    public RecvResult<byte[]> recvBytes() {
-        return recvBytes(RecvFlags.NONE);
-    }
-
-    /**
-     * Receives a UTF-8 string.
+     * Receives a UTF-8 string with specified flags.
      *
      * <p>This method uses reusable internal {@link Message} buffer for optimal performance.</p>
      *
      * @param flags Receive flags
-     * @return RecvResult containing received string on success, or empty if would block
+     * @return Optional containing received string, or empty if would block
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      *
      * <p><b>Example:</b></p>
      * <pre>{@code
-     * RecvResult<String> result = socket.recvString(RecvFlags.DONT_WAIT);
+     * Optional<String> result = socket.recvString(RecvFlags.DONT_WAIT);
      * result.ifPresent(msg -> System.out.println("Message: " + msg));
      *
      * // Or with map
-     * result.map(String::toUpperCase)
+     * socket.recvString(RecvFlags.DONT_WAIT)
+     *       .map(String::toUpperCase)
      *       .ifPresent(this::processMessage);
      * }</pre>
      */
-    public RecvResult<String> recvString(RecvFlags flags) {
+    public Optional<String> recvString(RecvFlags flags) {
         recvStringMessage.rebuild();
         int result = LibZmq.msgRecv(recvStringMessage.msgSegment, getHandle(), flags.getValue());
         if (result == -1) {
             int errno = LibZmq.errno();
             if (errno == ZmqConstants.EAGAIN) {
-                return RecvResult.empty();
+                return Optional.empty();  // Would block
             }
-            throw new ZmqException(errno);
+            throw new ZmqException(errno);  // Real error
         }
-        return RecvResult.success(recvStringMessage.toString());
-    }
-
-    /**
-     * Receives a UTF-8 string with default flags.
-     * @return RecvResult containing received string on success, or empty if would block
-     * @see #recvString(RecvFlags)
-     */
-    public RecvResult<String> recvString() {
-        return recvString(RecvFlags.NONE);
+        return Optional.of(recvStringMessage.toString());
     }
 
 
@@ -559,8 +524,8 @@ public final class Socket implements AutoCloseable {
      * Receives a complete multipart message.
      *
      * <p>This method receives all parts of a multipart message atomically. The first frame
-     * is received with the specified flags. If EAGAIN occurs on the first frame, an empty
-     * result is returned. Once the first frame is received, subsequent frames are received
+     * is received with non-blocking semantics. If EAGAIN occurs on the first frame, an empty
+     * Optional is returned. Once the first frame is received, subsequent frames are received
      * with blocking semantics to ensure atomicity.</p>
      *
      * <p><b>Atomicity Guarantee:</b> This method ensures that either all frames of a multipart
@@ -575,13 +540,13 @@ public final class Socket implements AutoCloseable {
      * be corrupted after such an error and the socket should be closed and recreated for
      * reliable operation.</p>
      *
-     * @return RecvResult containing the complete multipart message, or empty if would block
+     * @return Optional containing the complete multipart message, or empty if would block
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN), with detailed context about
      *         which frame failed if the error occurred during subsequent frame reception
      *
      * <p><b>Example:</b></p>
      * <pre>{@code
-     * RecvResult<MultipartMessage> result = socket.recvMultipart();
+     * Optional<MultipartMessage> result = socket.recvMultipart();
      * result.ifPresent(msg -> {
      *     System.out.println("Received " + msg.size() + " frames");
      *     for (byte[] frame : msg) {
@@ -602,7 +567,7 @@ public final class Socket implements AutoCloseable {
      *
      * @see MultipartMessage
      */
-    public RecvResult<MultipartMessage> recvMultipart() {
+    public Optional<MultipartMessage> recvMultipart() {
         MultipartMessage msg = new MultipartMessage();
         int framesReceived = 0;
 
@@ -613,9 +578,9 @@ public final class Socket implements AutoCloseable {
             if (result == -1) {
                 int errno = LibZmq.errno();
                 if (errno == ZmqConstants.EAGAIN) {
-                    return RecvResult.empty();
+                    return Optional.empty();  // Would block
                 }
-                throw new ZmqException(errno);
+                throw new ZmqException(errno);  // Real error
             }
             msg.add(frame.toByteArray());
             framesReceived = 1;
@@ -639,7 +604,61 @@ public final class Socket implements AutoCloseable {
                 framesReceived++;
             }
         }
-        return RecvResult.success(msg);
+        return Optional.of(msg);
+    }
+
+    // ========== TryRecv Methods (Non-blocking convenience wrappers) ==========
+
+    /**
+     * Non-blocking receive into a buffer.
+     * Convenience method equivalent to {@code recv(buffer, RecvFlags.DONT_WAIT)}.
+     *
+     * @param buffer The buffer to receive into
+     * @return Number of bytes received, or {@code -1} if would block (EAGAIN)
+     * @throws NullPointerException if buffer is null
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     *
+     * <p><b>Example:</b></p>
+     * <pre>{@code
+     * byte[] buffer = new byte[256];
+     * int bytes = socket.tryRecv(buffer);
+     * if (bytes > 0) {
+     *     processData(buffer, bytes);
+     * }
+     * }</pre>
+     */
+    public int tryRecv(byte[] buffer) {
+        return recv(buffer, RecvFlags.DONT_WAIT);
+    }
+
+    /**
+     * Non-blocking receive into a message.
+     * Convenience method equivalent to {@code recv(message, RecvFlags.DONT_WAIT)}.
+     *
+     * @param message The message to receive into
+     * @return Number of bytes received, or {@code -1} if would block (EAGAIN)
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     */
+    public int tryRecv(Message message) {
+        return recv(message, RecvFlags.DONT_WAIT);
+    }
+
+    /**
+     * Non-blocking receive string.
+     * Convenience method equivalent to {@code recvString(RecvFlags.DONT_WAIT)}.
+     *
+     * @return Optional containing received string, or empty if would block
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     *
+     * <p><b>Example:</b></p>
+     * <pre>{@code
+     * socket.tryRecvString().ifPresent(msg -> {
+     *     System.out.println("Received: " + msg);
+     * });
+     * }</pre>
+     */
+    public Optional<String> tryRecvString() {
+        return recvString(RecvFlags.DONT_WAIT);
     }
 
     // ========== Socket Options ==========
@@ -890,11 +909,7 @@ public final class Socket implements AutoCloseable {
     public void close() {
         if (!closed) {
             closed = true;
-            // Clean up reusable Message objects
-            if (recvMessage != null) {
-                recvMessage.close();
-                recvMessage = null;
-            }
+            // Clean up reusable Message object
             if (recvStringMessage != null) {
                 recvStringMessage.close();
                 recvStringMessage = null;

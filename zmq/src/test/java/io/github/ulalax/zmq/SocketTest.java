@@ -214,7 +214,7 @@ class SocketTest {
 
                 // And: Verify reception
                 byte[] buffer = new byte[256];
-                int n1 = pull.recv(buffer, RecvFlags.NONE).value();
+                int n1 = pull.recv(buffer, RecvFlags.NONE);
                 assertThat(new String(buffer, 0, n1, StandardCharsets.UTF_8))
                         .as("First part received")
                         .isEqualTo("part1");
@@ -222,7 +222,7 @@ class SocketTest {
                         .as("Has more parts after first")
                         .isTrue();
 
-                int n2 = pull.recv(buffer, RecvFlags.NONE).value();
+                int n2 = pull.recv(buffer, RecvFlags.NONE);
                 assertThat(new String(buffer, 0, n2, StandardCharsets.UTF_8))
                         .as("Second part received")
                         .isEqualTo("part2");
@@ -243,15 +243,12 @@ class SocketTest {
 
                 // When: Try to receive with no data
                 byte[] buffer = new byte[256];
-                RecvResult<Integer> result = socket.recv(buffer, RecvFlags.DONT_WAIT);
+                int result = socket.recv(buffer, RecvFlags.DONT_WAIT);
 
-                // Then: Should return empty result, not throw exception
-                assertThat(result.wouldBlock())
-                        .as("recv with DONT_WAIT should return empty result for EAGAIN")
-                        .isTrue();
-                assertThat(result.isPresent())
-                        .as("result should not be present")
-                        .isFalse();
+                // Then: Should return -1 for EAGAIN, not throw exception
+                assertThat(result)
+                        .as("recv with DONT_WAIT should return -1 for EAGAIN")
+                        .isEqualTo(-1);
             }
         }
 
@@ -265,21 +262,18 @@ class SocketTest {
                 socket.bind("inproc://test-eagain-string");
 
                 // When: Try to receive with no data
-                RecvResult<String> result = socket.recvString(RecvFlags.DONT_WAIT);
+                java.util.Optional<String> result = socket.recvString(RecvFlags.DONT_WAIT);
 
-                // Then: Should return empty result, not throw exception
-                assertThat(result.wouldBlock())
-                        .as("recvString with DONT_WAIT should return empty result for EAGAIN")
+                // Then: Should return empty Optional, not throw exception
+                assertThat(result.isEmpty())
+                        .as("recvString with DONT_WAIT should return empty Optional for EAGAIN")
                         .isTrue();
-                assertThat(result.isPresent())
-                        .as("result should not be present")
-                        .isFalse();
             }
         }
 
         @Test
-        @DisplayName("Should recvBytes with DONT_WAIT return empty result for EAGAIN")
-        void should_RecvBytes_With_DontWait_Return_Empty_For_EAGAIN() throws Exception {
+        @DisplayName("Should recv with DONT_WAIT return -1 for EAGAIN (byte buffer)")
+        void should_Recv_With_DontWait_Return_Minus1_For_EAGAIN() throws Exception {
             // Given: A PULL socket with no incoming messages
             try (Context ctx = new Context();
                  Socket socket = new Socket(ctx, SocketType.PULL)) {
@@ -287,15 +281,13 @@ class SocketTest {
                 socket.bind("inproc://test-eagain-bytes");
 
                 // When: Try to receive with no data
-                RecvResult<byte[]> result = socket.recvBytes(RecvFlags.DONT_WAIT);
+                byte[] buffer = new byte[256];
+                int result = socket.recv(buffer, RecvFlags.DONT_WAIT);
 
-                // Then: Should return empty result, not throw exception
-                assertThat(result.wouldBlock())
-                        .as("recvBytes with DONT_WAIT should return empty result for EAGAIN")
-                        .isTrue();
-                assertThat(result.isPresent())
-                        .as("result should not be present")
-                        .isFalse();
+                // Then: Should return -1, not throw exception
+                assertThat(result)
+                        .as("recv with DONT_WAIT should return -1 for EAGAIN")
+                        .isEqualTo(-1);
             }
         }
 
@@ -310,15 +302,12 @@ class SocketTest {
                 socket.setOption(SocketOption.RCVTIMEO, 10);  // Very short timeout for non-blocking behavior
 
                 // When: Try to receive with no data
-                RecvResult<MultipartMessage> result = socket.recvMultipart();
+                java.util.Optional<MultipartMessage> result = socket.recvMultipart();
 
-                // Then: Should return empty result, not throw exception
-                assertThat(result.wouldBlock())
-                        .as("recvMultipart should return empty result for EAGAIN")
+                // Then: Should return empty Optional, not throw exception
+                assertThat(result.isEmpty())
+                        .as("recvMultipart should return empty Optional for EAGAIN")
                         .isTrue();
-                assertThat(result.isPresent())
-                        .as("result should not be present")
-                        .isFalse();
             }
         }
 
@@ -335,23 +324,20 @@ class SocketTest {
                 Thread.sleep(100);
 
                 // When: Send with DONT_WAIT flag
-                SendResult sent = push.send("test".getBytes(StandardCharsets.UTF_8), SendFlags.DONT_WAIT);
-                assertThat(sent.isPresent()).as("Message sent").isTrue();
+                boolean sent = push.send("test".getBytes(StandardCharsets.UTF_8), SendFlags.DONT_WAIT);
+                assertThat(sent).as("Message sent").isTrue();
 
                 Thread.sleep(50);
 
                 // And: Receive with DONT_WAIT flag
                 byte[] buffer = new byte[256];
-                RecvResult<Integer> bytesReceived = pull.recv(buffer, RecvFlags.DONT_WAIT);
+                int bytesReceived = pull.recv(buffer, RecvFlags.DONT_WAIT);
 
                 // Then: Should receive the message successfully
-                assertThat(bytesReceived.isPresent())
-                        .as("Message received")
-                        .isTrue();
-                assertThat(bytesReceived.value())
+                assertThat(bytesReceived)
                         .as("Bytes received")
                         .isGreaterThan(0);
-                assertThat(new String(buffer, 0, bytesReceived.value(), StandardCharsets.UTF_8))
+                assertThat(new String(buffer, 0, bytesReceived, StandardCharsets.UTF_8))
                         .as("Received message content")
                         .isEqualTo("test");
             }

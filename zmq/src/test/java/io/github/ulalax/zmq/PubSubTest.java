@@ -44,10 +44,10 @@ class PubSubTest {
 
                 // Then: Subscriber should receive the message
                 sub.setOption(SocketOption.RCVTIMEO, 1000);
-                byte[] received = sub.recvBytes().value();
+                String received = sub.recvString();
 
                 assertThat(received).isNotNull();
-                assertThat(new String(received, StandardCharsets.UTF_8))
+                assertThat(received)
                         .as("Received message")
                         .isEqualTo(message);
             }
@@ -82,9 +82,9 @@ class PubSubTest {
                 pub.send("news.sports Hello");
 
                 // Then: Should receive the news message
-                byte[] received = sub.recvBytes().value();
+                String received = sub.recvString();
                 assertThat(received).isNotNull();
-                assertThat(new String(received, StandardCharsets.UTF_8))
+                assertThat(received)
                         .as("Received news message")
                         .startsWith("news.");
 
@@ -93,10 +93,10 @@ class PubSubTest {
 
                 // Then: Should not receive the weather message (timeout)
                 byte[] buffer = new byte[256];
-                RecvResult<Integer> bytesReceived = sub.recv(buffer, RecvFlags.DONT_WAIT);
-                assertThat(bytesReceived.wouldBlock())
+                int bytesReceived = sub.recv(buffer, RecvFlags.DONT_WAIT);
+                assertThat(bytesReceived)
                         .as("Filtered message should not be received")
-                        .isTrue();
+                        .isEqualTo(-1);
             }
         }
     }
@@ -134,16 +134,16 @@ class PubSubTest {
                 pub.send(message);
 
                 // Then: Both subscribers should receive the message
-                byte[] received1 = sub1.recvBytes().value();
-                byte[] received2 = sub2.recvBytes().value();
+                String received1 = sub1.recvString();
+                String received2 = sub2.recvString();
 
                 assertThat(received1).isNotNull();
                 assertThat(received2).isNotNull();
 
-                assertThat(new String(received1, StandardCharsets.UTF_8))
+                assertThat(received1)
                         .as("First subscriber received message")
                         .isEqualTo(message);
-                assertThat(new String(received2, StandardCharsets.UTF_8))
+                assertThat(received2)
                         .as("Second subscriber received message")
                         .isEqualTo(message);
             }

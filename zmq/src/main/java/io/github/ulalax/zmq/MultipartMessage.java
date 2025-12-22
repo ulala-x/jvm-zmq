@@ -3,6 +3,7 @@ package io.github.ulalax.zmq;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Helper for multipart messages.
@@ -118,9 +119,9 @@ public final class MultipartMessage implements Iterable<byte[]> {
     public static MultipartMessage recv(Socket socket) {
         // Use socket.recvMultipart() and block until a message is available
         while (true) {
-            RecvResult<MultipartMessage> result = socket.recvMultipart();
+            Optional<MultipartMessage> result = socket.recvMultipart();
             if (result.isPresent()) {
-                return result.value();
+                return result.get();
             }
             // Would block - sleep briefly and retry
             try {

@@ -12,18 +12,23 @@ import java.util.concurrent.TimeUnit;
 /**
  * Compares receive strategies for ROUTER-to-ROUTER multipart messaging:
  *
- * 1. Blocking: Thread blocks on Recv() until message available
- *    - Highest throughput (baseline)
- *    - Simplest implementation
- *    - Thread dedicated to single socket
+ * 1. PureBlocking: Blocking Recv() for every message
+ *    - Simple implementation
+ *    - One syscall per message
+ *    - Baseline for comparison
  *
- * 2. NonBlocking (Sleep 1ms): TryRecv() with Thread.Sleep(1ms) fallback
+ * 2. Blocking+Batch: Blocking wait + batch non-blocking recv
+ *    - First message: blocking wait
+ *    - Then batch-process available messages with non-blocking recv
+ *    - Reduces syscalls, higher throughput
+ *
+ * 3. NonBlocking (Sleep 1ms): TryRecv() with Thread.Sleep(1ms) fallback
  *    - No blocking, but Thread.Sleep() adds overhead
  *    - Slower than Blocking/Poller
  *    - Not recommended for production
  *
- * 3. Poller: Event-driven with zmq_poll()
- *    - Similar to Blocking performance
+ * 4. Poller: Event-driven with zmq_poll()
+ *    - Similar to Blocking+Batch performance
  *    - Multi-socket support
  *    - Recommended for production use
  */
@@ -36,7 +41,8 @@ import java.util.concurrent.TimeUnit;
 public class ReceiveModeBenchmark {
 
     public enum ReceiveMode {
-        BLOCKING,
+        PURE_BLOCKING,
+        BLOCKING_BATCH,
         NON_BLOCKING,
         POLLER
     }
@@ -61,7 +67,7 @@ public class ReceiveModeBenchmark {
         @Param({"10000"})
         int messageCount;
 
-        @Param({"BLOCKING", "NON_BLOCKING", "POLLER"})
+        @Param({"PURE_BLOCKING", "BLOCKING_BATCH", "NON_BLOCKING", "POLLER"})
         ReceiveMode mode;
 
         @Setup(Level.Trial)
@@ -122,26 +128,44 @@ public class ReceiveModeBenchmark {
     }
 
     /**
-     * Blocking receive mode - highest performance, simplest implementation.
+     * Pure blocking receive mode - simplest implementation.
+     * Blocking Recv() for every single message.
+     * One syscall per message - baseline for comparison.
+     */
+    private void receivePureBlocking(Socket socket, RouterState state) {
+        try {
+            for (int n = 0; n < state.messageCount; n++) {
+                socket.recv(state.identityBuffer, RecvFlags.NONE);
+                socket.recv(state.recvBuffer, RecvFlags.NONE);
+                state.receiverLatch.countDown();
+            }
+        } catch (Exception e) {
+            state.receiverError = true;
+            state.receiverException = e;
+        }
+    }
+
+    /**
+     * Blocking + Batch receive mode - optimized for throughput.
      * Uses blocking Recv() for first message, then batch-processes available messages
      * with non-blocking recv to minimize syscall overhead.
      */
-    private void receiveBlocking(Socket socket, RouterState state) {
+    private void receiveBlockingBatch(Socket socket, RouterState state) {
         try {
             int n = 0;
             while (n < state.messageCount) {
-                // First message: blocking wait (maintains Blocking semantics)
-                socket.recv(state.identityBuffer, RecvFlags.NONE).value();
-                socket.recv(state.recvBuffer, RecvFlags.NONE).value();
+                // First message: blocking wait
+                socket.recv(state.identityBuffer, RecvFlags.NONE);
+                socket.recv(state.recvBuffer, RecvFlags.NONE);
                 state.receiverLatch.countDown();
                 n++;
 
                 // Batch receive available messages (reduces syscalls)
                 while (n < state.messageCount) {
-                    RecvResult<Integer> idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                    if (idResult.wouldBlock()) break;  // No more available
+                    int idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                    if (idResult == -1) break;  // No more available (EAGAIN)
 
-                    socket.recv(state.recvBuffer, RecvFlags.NONE).value();
+                    socket.recv(state.recvBuffer, RecvFlags.NONE);
                     state.receiverLatch.countDown();
                     n++;
                 }
@@ -161,19 +185,19 @@ public class ReceiveModeBenchmark {
         try {
             int n = 0;
             while (n < state.messageCount) {
-                RecvResult<Integer> idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                if (idResult.isPresent()) {
-                    socket.recv(state.recvBuffer, RecvFlags.DONT_WAIT).value();
+                int idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                if (idResult != -1) {
+                    socket.recv(state.recvBuffer, RecvFlags.DONT_WAIT);
                     state.receiverLatch.countDown();
                     n++;
 
                     // Batch receive without sleep
                     while (n < state.messageCount) {
-                        RecvResult<Integer> batchIdResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                        if (batchIdResult.wouldBlock()) {
+                        int batchIdResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                        if (batchIdResult == -1) {
                             break;
                         }
-                        socket.recv(state.recvBuffer, RecvFlags.DONT_WAIT).value();
+                        socket.recv(state.recvBuffer, RecvFlags.DONT_WAIT);
                         state.receiverLatch.countDown();
                         n++;
                     }
@@ -202,10 +226,10 @@ public class ReceiveModeBenchmark {
 
                 // Batch receive all available messages
                 while (n < state.messageCount) {
-                    RecvResult<Integer> idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
-                    if (idResult.wouldBlock()) break;  // No more available
+                    int idResult = socket.recv(state.identityBuffer, RecvFlags.DONT_WAIT);
+                    if (idResult == -1) break;  // No more available (EAGAIN)
 
-                    socket.recv(state.recvBuffer, RecvFlags.NONE).value();
+                    socket.recv(state.recvBuffer, RecvFlags.NONE);
                     state.receiverLatch.countDown();
                     n++;
                 }
@@ -224,7 +248,8 @@ public class ReceiveModeBenchmark {
 
         Thread receiverThread = new Thread(() -> {
             switch (state.mode) {
-                case BLOCKING -> receiveBlocking(state.router2, state);
+                case PURE_BLOCKING -> receivePureBlocking(state.router2, state);
+                case BLOCKING_BATCH -> receiveBlockingBatch(state.router2, state);
                 case NON_BLOCKING -> receiveNonBlocking(state.router2, state);
                 case POLLER -> receivePoller(state.router2, state);
             }

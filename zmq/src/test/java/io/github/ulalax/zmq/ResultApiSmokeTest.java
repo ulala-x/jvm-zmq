@@ -2,14 +2,14 @@ package io.github.ulalax.zmq;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Smoke test to verify the Result API refactoring works correctly.
+ * Smoke test to verify the simplified .NET-style API works correctly.
  * Tests basic send/receive operations in both blocking and non-blocking modes.
  */
 class ResultApiSmokeTest {
@@ -55,20 +55,20 @@ class ResultApiSmokeTest {
         byte[] data = "Hello World".getBytes();
 
         // When - Blocking send
-        SendResult sendResult = sender.send(data);
+        boolean sent = sender.send(data);
 
         // Then
-        assertThat(sendResult.isPresent()).isTrue();
-        assertThat(sendResult.value()).isEqualTo(data.length);
-        assertThat(sendResult.wouldBlock()).isFalse();
+        assertThat(sent).isTrue();
 
         // When - Blocking receive
-        RecvResult<byte[]> recvResult = receiver.recvBytes();
+        byte[] buffer = new byte[1024];
+        int bytes = receiver.recv(buffer);
 
         // Then
-        assertThat(recvResult.isPresent()).isTrue();
-        assertThat(recvResult.value()).isEqualTo(data);
-        assertThat(recvResult.wouldBlock()).isFalse();
+        assertThat(bytes).isEqualTo(data.length);
+        byte[] received = new byte[bytes];
+        System.arraycopy(buffer, 0, received, 0, bytes);
+        assertThat(received).isEqualTo(data);
     }
 
     @Test
@@ -77,28 +77,26 @@ class ResultApiSmokeTest {
         String message = "Hello Result API";
 
         // When - Blocking send
-        SendResult sendResult = sender.send(message);
+        boolean sent = sender.send(message);
 
         // Then
-        assertThat(sendResult.isPresent()).isTrue();
-        assertThat(sendResult.value()).isGreaterThan(0);
+        assertThat(sent).isTrue();
 
         // When - Blocking receive
-        RecvResult<String> recvResult = receiver.recvString();
+        String received = receiver.recvString();
 
         // Then
-        assertThat(recvResult.isPresent()).isTrue();
-        assertThat(recvResult.value()).isEqualTo(message);
+        assertThat(received).isEqualTo(message);
     }
 
     @Test
     void testNonBlockingWouldBlock() {
         // When - Non-blocking receive on empty socket
-        RecvResult<byte[]> recvResult = receiver.recvBytes(RecvFlags.DONT_WAIT);
+        byte[] buffer = new byte[1024];
+        int bytes = receiver.recv(buffer, RecvFlags.DONT_WAIT);
 
-        // Then - Should return empty result (would block)
-        assertThat(recvResult.isPresent()).isFalse();
-        assertThat(recvResult.wouldBlock()).isTrue();
+        // Then - Should return -1 (would block)
+        assertThat(bytes).isEqualTo(-1);
     }
 
     @Test
@@ -107,11 +105,10 @@ class ResultApiSmokeTest {
         byte[] data = "Non-blocking test".getBytes();
 
         // When - Non-blocking send
-        SendResult sendResult = sender.send(data, SendFlags.DONT_WAIT);
+        boolean sent = sender.send(data, SendFlags.DONT_WAIT);
 
         // Then
-        assertThat(sendResult.isPresent()).isTrue();
-        assertThat(sendResult.value()).isEqualTo(data.length);
+        assertThat(sent).isTrue();
 
         // Give message time to arrive
         try {
@@ -121,11 +118,14 @@ class ResultApiSmokeTest {
         }
 
         // When - Non-blocking receive
-        RecvResult<byte[]> recvResult = receiver.recvBytes(RecvFlags.DONT_WAIT);
+        byte[] buffer = new byte[1024];
+        int bytes = receiver.recv(buffer, RecvFlags.DONT_WAIT);
 
         // Then
-        assertThat(recvResult.isPresent()).isTrue();
-        assertThat(recvResult.value()).isEqualTo(data);
+        assertThat(bytes).isEqualTo(data.length);
+        byte[] received = new byte[bytes];
+        System.arraycopy(buffer, 0, received, 0, bytes);
+        assertThat(received).isEqualTo(data);
     }
 
     @Test
@@ -134,9 +134,9 @@ class ResultApiSmokeTest {
         String message = "Functional API Test";
         sender.send(message);
 
-        // When - Using ifPresent
+        // When - Using Optional.ifPresent with non-blocking receive
         final String[] received = new String[1];
-        receiver.recvString().ifPresent(msg -> received[0] = msg);
+        receiver.recvString(RecvFlags.DONT_WAIT).ifPresent(msg -> received[0] = msg);
 
         // Then
         assertThat(received[0]).isEqualTo(message);
@@ -148,12 +148,12 @@ class ResultApiSmokeTest {
         sender.send("12345");
 
         // When - Transform received string to its length
-        RecvResult<Integer> lengthResult = receiver.recvString()
+        Optional<Integer> lengthResult = receiver.recvString(RecvFlags.DONT_WAIT)
             .map(String::length);
 
         // Then
-        assertThat(lengthResult.isPresent()).isTrue();
-        assertThat(lengthResult.value()).isEqualTo(5);
+        assertThat(lengthResult).isPresent();
+        assertThat(lengthResult.get()).isEqualTo(5);
     }
 
     @Test
@@ -176,11 +176,10 @@ class ResultApiSmokeTest {
 
         // When - Receive into Message object
         try (Message msg = new Message()) {
-            RecvResult<Integer> result = receiver.recv(msg, RecvFlags.NONE);
+            int bytes = receiver.recv(msg, RecvFlags.NONE);
 
             // Then
-            assertThat(result.isPresent()).isTrue();
-            assertThat(result.value()).isEqualTo(data.length);
+            assertThat(bytes).isEqualTo(data.length);
 
             // Extract data from message
             byte[] received = msg.data().toArray(ValueLayout.JAVA_BYTE);
@@ -196,14 +195,13 @@ class ResultApiSmokeTest {
 
         // When - Receive into byte buffer
         byte[] buffer = new byte[1024];
-        RecvResult<Integer> result = receiver.recv(buffer);
+        int bytes = receiver.recv(buffer);
 
         // Then
-        assertThat(result.isPresent()).isTrue();
-        assertThat(result.value()).isEqualTo(data.length);
+        assertThat(bytes).isEqualTo(data.length);
 
-        byte[] received = new byte[result.value()];
-        System.arraycopy(buffer, 0, received, 0, result.value());
+        byte[] received = new byte[bytes];
+        System.arraycopy(buffer, 0, received, 0, bytes);
         assertThat(received).isEqualTo(data);
     }
 
@@ -214,15 +212,70 @@ class ResultApiSmokeTest {
 
         // When - Send multiple messages
         for (String msg : messages) {
-            SendResult result = sender.send(msg);
-            assertThat(result.isPresent()).isTrue();
+            boolean sent = sender.send(msg);
+            assertThat(sent).isTrue();
         }
 
         // Then - Receive and verify all messages
         for (String expected : messages) {
-            RecvResult<String> result = receiver.recvString();
-            assertThat(result.isPresent()).isTrue();
-            assertThat(result.value()).isEqualTo(expected);
+            String received = receiver.recvString();
+            assertThat(received).isEqualTo(expected);
         }
+    }
+
+    @Test
+    void testTryRecvMethods() {
+        // Given
+        String message = "TryRecv Test";
+        sender.send(message);
+
+        // Give message time to arrive
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        // When - Use tryRecvString (non-blocking convenience method)
+        Optional<String> result = receiver.tryRecvString();
+
+        // Then
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEqualTo(message);
+    }
+
+    @Test
+    void testTryRecvBuffer() {
+        // Given
+        byte[] data = "TryRecv Buffer Test".getBytes();
+        sender.send(data);
+
+        // Give message time to arrive
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        // When - Use tryRecv (non-blocking convenience method)
+        byte[] buffer = new byte[1024];
+        int bytes = receiver.tryRecv(buffer);
+
+        // Then
+        assertThat(bytes).isEqualTo(data.length);
+        byte[] received = new byte[bytes];
+        System.arraycopy(buffer, 0, received, 0, bytes);
+        assertThat(received).isEqualTo(data);
+    }
+
+    @Test
+    void testTryRecvWouldBlock() {
+        // Given - Empty socket
+
+        // When - Use tryRecvString on empty socket
+        Optional<String> result = receiver.tryRecvString();
+
+        // Then - Should be empty
+        assertThat(result).isEmpty();
     }
 }
