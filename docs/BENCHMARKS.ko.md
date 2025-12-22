@@ -16,9 +16,9 @@ JMH(Java Microbenchmark Harness)를 사용한 JVM-ZMQ의 종합 성능 벤치마
 - **Warmup**: 3회 반복 (각 2초)
 - **Measurement**: 5회 반복 (각 5초)
 
-## 메모리 전략 벤치마크
+## 메시지 버퍼 전략 벤치마크
 
-메시지 송수신을 위한 네 가지 메모리 관리 전략 비교입니다.
+메시지 송수신을 위한 네 가지 버퍼 관리 전략 비교입니다.
 
 ### 성능 개요
 
@@ -102,7 +102,7 @@ System.arraycopy(recvBuffer, 0, outputBuffer, 0, size);
 - 1KB: 1.04M msg/sec
 - 64KB: 72K msg/sec
 
-#### 2. ArrayPool_SendRecv ✅ 권장
+#### 2. ArrayPool_SendRecv (권장)
 ```java
 // 송신
 ByteBuf sendBuf = allocator.buffer(messageSize);
@@ -165,7 +165,7 @@ try (Message msg = new Message()) {
 - 1KB: 997K msg/sec (ByteArray 대비 96%)
 - 64KB: 78K msg/sec (ByteArray 대비 108%)
 
-#### 4. MessageZeroCopy_SendRecv ❌ 사용 금지
+#### 4. MessageZeroCopy_SendRecv (사용 금지)
 ```java
 // 제로카피 콜백으로 송신
 Arena dataArena = Arena.ofShared();
@@ -185,17 +185,17 @@ socket.send(payloadMsg, SendFlags.DONT_WAIT);
 - **프로덕션에서 절대 사용 금지**
 
 **성능:**
-- 64B: 28K msg/sec (ByteArray 대비 1.6%) ❌
-- 512B: 26K msg/sec (ByteArray 대비 2.0%) ❌
-- 1KB: 26K msg/sec (ByteArray 대비 2.5%) ❌
-- 64KB: 19K msg/sec (ByteArray 대비 26%) ❌
+- 64B: 28K msg/sec (ByteArray 대비 1.6%)
+- 512B: 26K msg/sec (ByteArray 대비 2.0%)
+- 1KB: 26K msg/sec (ByteArray 대비 2.5%)
+- 64KB: 19K msg/sec (ByteArray 대비 26%)
 
 ### 수신 버퍼 모범 사례
 
-> **⚠️ 중요**: 메시지 수신 시 항상 미리 할당된 고정 버퍼를 사용하세요.
+> **중요**: 메시지 수신 시 항상 미리 할당된 고정 버퍼를 사용하세요.
 
 ```java
-// ✅ 좋음: 수신 버퍼를 한 번만 할당
+// 좋음: 수신 버퍼를 한 번만 할당
 byte[] recvBuffer = new byte[maxMessageSize];  // 설정 시 한 번만 할당
 
 while (running) {
@@ -205,7 +205,7 @@ while (running) {
 ```
 
 ```java
-// ❌ 나쁨: 매 수신마다 새 버퍼 할당
+// 나쁨: 매 수신마다 새 버퍼 할당
 while (running) {
     byte[] buffer = new byte[maxMessageSize];  // GC 압력!
     socket.recv(buffer, RecvFlags.NONE);
@@ -218,10 +218,10 @@ while (running) {
 
 | 사용 사례 | 권장 전략 | 이유 |
 |----------|----------|------|
-| **프로덕션 서버** | ✅ **ArrayPool** | 일정한 ~178KB 할당, 최소 GC 압력 |
+| **프로덕션 서버** | **ArrayPool** | 일정한 ~178KB 할당, 최소 GC 압력 |
 | 최대 처리량 (소형 메시지) | ByteArray | <512B에서 최고 msg/sec |
 | 네이티브 ZMQ API 선호 | Message | 직접 MemorySegment 액세스 |
-| 제로카피 요구사항 | ❌ MessageZeroCopy 사용 금지 | Arena.ofShared() 오버헤드가 너무 높음 |
+| 제로카피 요구사항 | MessageZeroCopy 사용 금지 | Arena.ofShared() 오버헤드가 너무 높음 |
 
 ## 수신 모드 벤치마크
 
@@ -233,7 +233,7 @@ PureBlocking, BlockingBatch, NonBlocking, Poller 네 가지 수신 전략 비교
 |------|---------------|----------------|---------------|----------------|
 | **PureBlocking** | 1.48M | 1.36M | 1.10M | 70K |
 | **BlockingBatch** | 1.46M | 1.35M | 1.03M | 70K |
-| **NonBlocking** | 1.38M | 1.27M | 943K | 44K ❌ |
+| **NonBlocking** | 1.38M | 1.27M | 943K | 44K (느림) |
 | **Poller** | 1.48M | 1.34M | 1.10M | 68K |
 
 ### 상세 메트릭
@@ -346,7 +346,7 @@ try (Poller poller = new Poller()) {
 
 **결론**: Poller는 PureBlocking과 동등한 성능을 제공하면서 다중 소켓 기능을 지원합니다.
 
-#### 4. NonBlocking with Sleep ❌ 사용 금지
+#### 4. NonBlocking with Sleep (사용 금지)
 ```java
 while (n < messageCount) {
     int bytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
@@ -376,7 +376,7 @@ while (n < messageCount) {
 - 64B: 1.38M msg/sec (PureBlocking 대비 93%)
 - 512B: 1.27M msg/sec (PureBlocking 대비 93%)
 - 1KB: 943K msg/sec (PureBlocking 대비 86%)
-- 64KB: 44K msg/sec (PureBlocking 대비 63%) ❌
+- 64KB: 44K msg/sec (PureBlocking 대비 63%)
 
 **결론**: 큰 메시지에서 현저히 느림. 대신 Poller를 사용하세요.
 
@@ -420,14 +420,14 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
 
 ## 핵심 요약
 
-1. **메모리 전략**:
-   - ✅ **프로덕션에서는 `ArrayPool` 사용** - 메시지 크기와 무관하게 일정한 ~178KB 할당
+1. **메시지 버퍼 전략**:
+   - **프로덕션에서는 `ArrayPool` 사용** - 메시지 크기와 무관하게 일정한 ~178KB 할당
    - 소형 메시지 (<512B): `ByteArray`가 최고 처리량 제공 (64B에서 1.71M msg/sec)
    - 대형 메시지 (>8KB): `ArrayPool` 필수 (ByteArray 대비 7,000배 적은 할당)
-   - ❌ **`MessageZeroCopy` 절대 사용 금지** (Arena.ofShared() 오버헤드로 40-62배 느림)
+   - `MessageZeroCopy` 사용 금지 (Arena.ofShared() 오버헤드로 40-62배 느림)
 
 2. **수신 버퍼**:
-   - ⚠️ 수신 시 항상 미리 할당된 고정 버퍼 사용
+   - 수신 시 항상 미리 할당된 고정 버퍼 사용
    - 매 수신마다 새 `byte[]` 할당 금지
    - 모든 전략에서 GC 압력 최소화를 위해 적용
 
@@ -435,7 +435,7 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
    - 단일 소켓 (단순): `PureBlocking` 사용 (가장 간단, 64B에서 1.48M msg/sec)
    - 단일 소켓 (최적화): `BlockingBatch` 사용 (시스템 콜 감소)
    - 다중 소켓: `Poller` 사용 (PureBlocking 대비 100% 성능, 다중 소켓 지원)
-   - ❌ sleep을 사용한 `NonBlocking` 절대 사용 금지 (대형 메시지에서 37% 느림)
+   - sleep을 사용한 `NonBlocking` 사용 금지 (대형 메시지에서 37% 느림)
 
 4. **GC 압력** (64KB 메시지 기준):
    - ArrayPool: 177KB (일정)

@@ -215,73 +215,75 @@ try (Context ctx = new Context();
 
 ## Performance
 
-Performance benchmarks on Router-to-Router pattern (Ubuntu 24.04 LTS, JDK 22.0.2, 10,000 messages per iteration):
+Based on JMH benchmarks (Router-to-Router pattern, 10,000 messages per iteration):
 
-### Memory Strategy Performance
+### Recommendations
 
-**Small Messages (64 bytes):**
-- **ByteArray**: 2.89M msg/sec (1.48 Gbps) - **Best for small messages**
-- ArrayPool: 1.87M msg/sec (958 Mbps)
-- Message: 1.20M msg/sec (614 Mbps)
-- ❌ MessageZeroCopy: 28K msg/sec (102x slower)
+**Message Buffer Strategy:**
+- Use `PooledByteBufAllocator` (Netty) for buffer pooling - reduces GC pressure by 99%+ for large messages
+- For small messages (<512B), simple `byte[]` offers the highest throughput (2.89M msg/sec @ 64B)
 
-**Medium Messages (512 bytes):**
-- **ByteArray**: 1.68M msg/sec (6.89 Gbps) - **Best throughput**
-- ArrayPool: 1.54M msg/sec (6.29 Gbps)
-- Message: 1.08M msg/sec (4.42 Gbps)
-- ❌ MessageZeroCopy: 27K msg/sec
+**Receive Mode:**
+- Single socket: Use blocking `recv()` - simplest and fastest
+- Multiple sockets: Use `Poller` - same performance as blocking with event-driven I/O
 
-**Medium Messages (1,024 bytes):**
-- **ByteArray**: 1.16M msg/sec (9.47 Gbps) - **Best throughput**
-- ArrayPool: 1.12M msg/sec (9.16 Gbps)
-- Message: 1.07M msg/sec (8.72 Gbps)
-- ❌ MessageZeroCopy: 26K msg/sec
+### Recommended Pattern
 
-**Large Messages (64KB+):**
+For production applications handling large messages or requiring low GC pressure:
 
-| Size | ByteArray | ArrayPool | Message | ZeroCopy |
-|------|-----------|-----------|---------|----------|
-| 64 KB | 76K msg/sec | **81K msg/sec** | 74K msg/sec | 18K msg/sec |
-| 128 KB | 47K msg/sec | **48K msg/sec** | 45K msg/sec | 15K msg/sec |
-| 256 KB | 27K msg/sec | **31K msg/sec** | 26K msg/sec | 12K msg/sec |
+```java
+import io.github.ulalax.zmq.*;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 
-**Recommendations:**
-- **Small messages (<512B)**: Use `socket.send(byte[])` for maximum throughput (2.89M msg/sec @ 64B)
-- **Medium messages (512B-1KB)**: Use `ByteArray` or `ArrayPool` - similar performance
-- **Large messages (>64KB)**: Use `ArrayPool` for best throughput and less GC pressure
-- **Avoid**: `MessageZeroCopy` - shows 100x+ slowdown due to Arena allocation overhead
+public class HighPerformanceReceiver {
+    private static final PooledByteBufAllocator allocator = PooledByteBufAllocator.DEFAULT;
+    private static final int MAX_MESSAGE_SIZE = 65536;
 
-### Receive Mode Performance
+    public void receiveMessages(Socket socket) {
+        // Pre-allocate receive buffer once
+        byte[] recvBuffer = new byte[MAX_MESSAGE_SIZE];
 
-| Message Size | Blocking | Poller | NonBlocking |
-|--------------|----------|--------|-------------|
-| **64 B** | **1.48M msg/sec** | 1.48M msg/sec | 1.38M msg/sec |
-| **512 B** | **1.36M msg/sec** | 1.34M msg/sec | 1.27M msg/sec |
-| **1 KB** | **1.10M msg/sec** | 1.10M msg/sec | 943K msg/sec |
-| **64 KB** | 70K msg/sec | 68K msg/sec | 44K msg/sec |
+        while (running) {
+            // Blocking receive - best for single socket
+            int size = socket.recv(recvBuffer, RecvFlags.NONE);
 
-**Recommendations:**
-- **Single socket**: Use `Blocking` mode (`socket.recv()`) for simplest implementation and best performance
-- **Multiple sockets**: Use `Poller` for event-driven programming - matches blocking performance
-- **Avoid**: `NonBlocking` with busy-wait/sleep - 37% slower for large messages
-
-### Running Benchmarks
-
-```bash
-# Run all JMH benchmarks
-./gradlew :zmq:jmh
-
-# Run specific benchmark
-./gradlew :zmq:jmh -PjmhIncludes='.*MemoryStrategyBenchmark.*'
-./gradlew :zmq:jmh -PjmhIncludes='.*ReceiveModeBenchmark.*'
-
-# Format results in .NET BenchmarkDotNet style
-cd zmq && python3 scripts/format_jmh_dotnet_style.py
+            // Use pooled buffer for processing (avoids GC pressure)
+            ByteBuf buf = allocator.buffer(size);
+            try {
+                buf.writeBytes(recvBuffer, 0, size);
+                processMessage(buf);
+            } finally {
+                buf.release();
+            }
+        }
+    }
+}
 ```
 
-Results are saved to `zmq/build/reports/jmh/results.json` (JSON) and `results-formatted.txt` (human-readable).
+For multiple sockets, use Poller:
 
-For complete benchmark analysis, implementation details, and optimization guidelines, see **[Performance Benchmarks](docs/BENCHMARKS.md)**.
+```java
+try (Poller poller = new Poller()) {
+    poller.register(socket1, PollEvents.IN);
+    poller.register(socket2, PollEvents.IN);
+
+    while (running) {
+        poller.poll(-1);  // Wait for events
+
+        if (poller.isReadable(0)) {
+            int size = socket1.recv(buffer, RecvFlags.NONE);
+            // process...
+        }
+        if (poller.isReadable(1)) {
+            int size = socket2.recv(buffer, RecvFlags.NONE);
+            // process...
+        }
+    }
+}
+```
+
+For detailed benchmark results, methodology, and alternative strategies, see [Performance Benchmarks](docs/BENCHMARKS.md).
 
 ## Socket Types
 

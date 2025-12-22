@@ -16,9 +16,9 @@ Comprehensive performance benchmarks for JVM-ZMQ using JMH (Java Microbenchmark 
 - **Warmup**: 3 iterations (2s each)
 - **Measurement**: 5 iterations (5s each)
 
-## Memory Strategy Benchmarks
+## Message Buffer Strategy Benchmarks
 
-Comparison of four memory management strategies for sending/receiving messages.
+Comparison of four buffer management strategies for sending/receiving messages.
 
 ### Performance Overview
 
@@ -102,7 +102,7 @@ System.arraycopy(recvBuffer, 0, outputBuffer, 0, size);
 - 1KB: 1.04M msg/sec
 - 64KB: 72K msg/sec
 
-#### 2. ArrayPool_SendRecv ✅ RECOMMENDED
+#### 2. ArrayPool_SendRecv (RECOMMENDED)
 ```java
 // Sending
 ByteBuf sendBuf = allocator.buffer(messageSize);
@@ -165,7 +165,7 @@ try (Message msg = new Message()) {
 - 1KB: 997K msg/sec (96% of ByteArray)
 - 64KB: 78K msg/sec (108% of ByteArray)
 
-#### 4. MessageZeroCopy_SendRecv ❌ NOT RECOMMENDED
+#### 4. MessageZeroCopy_SendRecv (NOT RECOMMENDED)
 ```java
 // Sending with zero-copy callback
 Arena dataArena = Arena.ofShared();
@@ -185,17 +185,17 @@ socket.send(payloadMsg, SendFlags.DONT_WAIT);
 - **Never use in production**
 
 **Performance:**
-- 64B: 28K msg/sec (1.6% of ByteArray) ❌
-- 512B: 26K msg/sec (2.0% of ByteArray) ❌
-- 1KB: 26K msg/sec (2.5% of ByteArray) ❌
-- 64KB: 19K msg/sec (26% of ByteArray) ❌
+- 64B: 28K msg/sec (1.6% of ByteArray)
+- 512B: 26K msg/sec (2.0% of ByteArray)
+- 1KB: 26K msg/sec (2.5% of ByteArray)
+- 64KB: 19K msg/sec (26% of ByteArray)
 
 ### Receive Buffer Best Practice
 
-> **⚠️ Important**: Always use a pre-allocated fixed buffer for receiving messages.
+> **Important**: Always use a pre-allocated fixed buffer for receiving messages.
 
 ```java
-// ✅ GOOD: Pre-allocate receive buffer once
+// GOOD: Pre-allocate receive buffer once
 byte[] recvBuffer = new byte[maxMessageSize];  // Allocate once at setup
 
 while (running) {
@@ -205,7 +205,7 @@ while (running) {
 ```
 
 ```java
-// ❌ BAD: Allocate new buffer for each receive
+// BAD: Allocate new buffer for each receive
 while (running) {
     byte[] buffer = new byte[maxMessageSize];  // GC pressure!
     socket.recv(buffer, RecvFlags.NONE);
@@ -218,10 +218,10 @@ This practice is essential for minimizing GC pressure in high-throughput applica
 
 | Use Case | Recommended Strategy | Reason |
 |----------|---------------------|--------|
-| **Production servers** | ✅ **ArrayPool** | Constant ~178KB allocation, minimal GC pressure |
+| **Production servers** | **ArrayPool** | Constant ~178KB allocation, minimal GC pressure |
 | Maximum throughput (small messages) | ByteArray | Highest msg/sec for <512B |
 | Native ZMQ API preference | Message | Direct MemorySegment access |
-| Zero-copy requirements | ❌ Never use MessageZeroCopy | Arena.ofShared() overhead too high |
+| Zero-copy requirements | Avoid MessageZeroCopy | Arena.ofShared() overhead too high |
 
 ## Receive Mode Benchmarks
 
@@ -233,7 +233,7 @@ Comparison of four receive strategies: PureBlocking, BlockingBatch, NonBlocking,
 |------|---------------|----------------|---------------|----------------|
 | **PureBlocking** | 1.48M | 1.36M | 1.10M | 70K |
 | **BlockingBatch** | 1.46M | 1.35M | 1.03M | 70K |
-| **NonBlocking** | 1.38M | 1.27M | 943K | 44K ❌ |
+| **NonBlocking** | 1.38M | 1.27M | 943K | 44K (slow) |
 | **Poller** | 1.48M | 1.34M | 1.10M | 68K |
 
 ### Detailed Metrics
@@ -346,7 +346,7 @@ try (Poller poller = new Poller()) {
 
 **Verdict**: Poller matches PureBlocking performance while providing multi-socket capability.
 
-#### 4. NonBlocking with Sleep ❌ NOT RECOMMENDED
+#### 4. NonBlocking with Sleep (NOT RECOMMENDED)
 ```java
 while (n < messageCount) {
     int bytes = socket.recv(identityBuffer, RecvFlags.DONT_WAIT);
@@ -376,7 +376,7 @@ while (n < messageCount) {
 - 64B: 1.38M msg/sec (93% of PureBlocking)
 - 512B: 1.27M msg/sec (93% of PureBlocking)
 - 1KB: 943K msg/sec (86% of PureBlocking)
-- 64KB: 44K msg/sec (63% of PureBlocking) ❌
+- 64KB: 44K msg/sec (63% of PureBlocking)
 
 **Verdict**: Significantly worse for large messages. Use Poller instead.
 
@@ -420,14 +420,14 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
 
 ## Key Takeaways
 
-1. **Memory Strategy**:
-   - ✅ **Use `ArrayPool` for production** - constant ~178KB allocation regardless of message size
+1. **Message Buffer Strategy**:
+   - **Use `ArrayPool` for production** - constant ~178KB allocation regardless of message size
    - Small messages (<512B): `ByteArray` offers highest throughput (1.71M msg/sec @ 64B)
    - Large messages (>8KB): `ArrayPool` is essential (7,000x less allocation than ByteArray)
-   - ❌ **Never use** `MessageZeroCopy` (40-62x slower due to Arena.ofShared() overhead)
+   - Avoid `MessageZeroCopy` (40-62x slower due to Arena.ofShared() overhead)
 
 2. **Receive Buffer**:
-   - ⚠️ Always use pre-allocated fixed buffers for receiving
+   - Always use pre-allocated fixed buffers for receiving
    - Avoid allocating new `byte[]` for each receive operation
    - This applies to all strategies for minimizing GC pressure
 
@@ -435,7 +435,7 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
    - Single socket (simple): Use `PureBlocking` (simplest, 1.48M msg/sec @ 64B)
    - Single socket (optimized): Use `BlockingBatch` (reduces syscalls)
    - Multiple sockets: Use `Poller` (100% of PureBlocking performance, multi-socket support)
-   - ❌ **Never use** `NonBlocking` with sleep (37% slower for large messages)
+   - Avoid `NonBlocking` with sleep (37% slower for large messages)
 
 4. **GC Pressure** (at 64KB messages):
    - ArrayPool: 177KB (constant)

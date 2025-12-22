@@ -215,73 +215,75 @@ try (Context ctx = new Context();
 
 ## 성능
 
-Router-to-Router 패턴 성능 벤치마크 (Ubuntu 24.04 LTS, JDK 22.0.2, 반복당 10,000개 메시지):
+JMH 벤치마크 결과 (Router-to-Router 패턴, 반복당 10,000개 메시지):
 
-### 메모리 전략 성능
+### 권장 사항
 
-**작은 메시지 (64 bytes):**
-- **ByteArray**: 2.89M msg/sec (1.48 Gbps) - **작은 메시지에 최적**
-- ArrayPool: 1.87M msg/sec (958 Mbps)
-- Message: 1.20M msg/sec (614 Mbps)
-- ❌ MessageZeroCopy: 28K msg/sec (102배 느림)
+**메시지 버퍼 전략:**
+- 버퍼 풀링을 위해 `PooledByteBufAllocator` (Netty) 사용 - 큰 메시지에서 GC 압력 99%+ 감소
+- 작은 메시지 (<512B)의 경우 단순 `byte[]`가 최고 처리량 제공 (64B에서 2.89M msg/sec)
 
-**중간 메시지 (512 bytes):**
-- **ByteArray**: 1.68M msg/sec (6.89 Gbps) - **최고 처리량**
-- ArrayPool: 1.54M msg/sec (6.29 Gbps)
-- Message: 1.08M msg/sec (4.42 Gbps)
-- ❌ MessageZeroCopy: 27K msg/sec
+**수신 모드:**
+- 단일 소켓: 블로킹 `recv()` 사용 - 가장 간단하고 빠름
+- 다중 소켓: `Poller` 사용 - 블로킹과 동일한 성능 + 이벤트 기반 I/O
 
-**중간 메시지 (1,024 bytes):**
-- **ByteArray**: 1.16M msg/sec (9.47 Gbps) - **최고 처리량**
-- ArrayPool: 1.12M msg/sec (9.16 Gbps)
-- Message: 1.07M msg/sec (8.72 Gbps)
-- ❌ MessageZeroCopy: 26K msg/sec
+### 권장 패턴
 
-**큰 메시지 (64KB+):**
+큰 메시지를 처리하거나 낮은 GC 압력이 필요한 프로덕션 애플리케이션:
 
-| 크기 | ByteArray | ArrayPool | Message | ZeroCopy |
-|------|-----------|-----------|---------|----------|
-| 64 KB | 76K msg/sec | **81K msg/sec** | 74K msg/sec | 18K msg/sec |
-| 128 KB | 47K msg/sec | **48K msg/sec** | 45K msg/sec | 15K msg/sec |
-| 256 KB | 27K msg/sec | **31K msg/sec** | 26K msg/sec | 12K msg/sec |
+```java
+import io.github.ulalax.zmq.*;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 
-**권장 사항:**
-- **작은 메시지 (<512B)**: 최대 처리량을 위해 `socket.send(byte[])`를 사용 (64B에서 2.89M msg/sec)
-- **중간 메시지 (512B-1KB)**: `ByteArray` 또는 `ArrayPool` 사용 - 유사한 성능
-- **큰 메시지 (>64KB)**: 최고 처리량과 적은 GC 압력을 위해 `ArrayPool` 사용
-- **피하기**: `MessageZeroCopy` - Arena 할당 오버헤드로 인해 100배+ 느림
+public class HighPerformanceReceiver {
+    private static final PooledByteBufAllocator allocator = PooledByteBufAllocator.DEFAULT;
+    private static final int MAX_MESSAGE_SIZE = 65536;
 
-### 수신 모드 성능
+    public void receiveMessages(Socket socket) {
+        // 수신 버퍼를 한 번만 미리 할당
+        byte[] recvBuffer = new byte[MAX_MESSAGE_SIZE];
 
-| 메시지 크기 | 블로킹 | 폴러 | 논블로킹 |
-|--------------|----------|--------|-------------|
-| **64 B** | **1.48M msg/sec** | 1.48M msg/sec | 1.38M msg/sec |
-| **512 B** | **1.36M msg/sec** | 1.34M msg/sec | 1.27M msg/sec |
-| **1 KB** | **1.10M msg/sec** | 1.10M msg/sec | 943K msg/sec |
-| **64 KB** | 70K msg/sec | 68K msg/sec | 44K msg/sec |
+        while (running) {
+            // 블로킹 수신 - 단일 소켓에 최적
+            int size = socket.recv(recvBuffer, RecvFlags.NONE);
 
-**권장 사항:**
-- **단일 소켓**: 가장 간단한 구현과 최고 성능을 위해 `블로킹` 모드 (`socket.recv()`) 사용
-- **다중 소켓**: 이벤트 기반 프로그래밍을 위해 `폴러` 사용 - 블로킹 성능과 동일
-- **피하기**: busy-wait/sleep을 사용하는 `논블로킹` - 큰 메시지에서 37% 느림
-
-### 벤치마크 실행
-
-```bash
-# 모든 JMH 벤치마크 실행
-./gradlew :zmq:jmh
-
-# 특정 벤치마크 실행
-./gradlew :zmq:jmh -PjmhIncludes='.*MemoryStrategyBenchmark.*'
-./gradlew :zmq:jmh -PjmhIncludes='.*ReceiveModeBenchmark.*'
-
-# .NET BenchmarkDotNet 스타일로 결과 포맷
-cd zmq && python3 scripts/format_jmh_dotnet_style.py
+            // 처리를 위해 풀링된 버퍼 사용 (GC 압력 방지)
+            ByteBuf buf = allocator.buffer(size);
+            try {
+                buf.writeBytes(recvBuffer, 0, size);
+                processMessage(buf);
+            } finally {
+                buf.release();
+            }
+        }
+    }
+}
 ```
 
-결과는 `zmq/build/reports/jmh/results.json` (JSON) 및 `results-formatted.txt` (사람이 읽을 수 있는 형식)에 저장됩니다.
+다중 소켓의 경우 Poller 사용:
 
-완전한 벤치마크 분석, 구현 세부사항 및 최적화 가이드라인은 **[성능 벤치마크](docs/BENCHMARKS.ko.md)**를 참조하세요.
+```java
+try (Poller poller = new Poller()) {
+    poller.register(socket1, PollEvents.IN);
+    poller.register(socket2, PollEvents.IN);
+
+    while (running) {
+        poller.poll(-1);  // 이벤트 대기
+
+        if (poller.isReadable(0)) {
+            int size = socket1.recv(buffer, RecvFlags.NONE);
+            // 처리...
+        }
+        if (poller.isReadable(1)) {
+            int size = socket2.recv(buffer, RecvFlags.NONE);
+            // 처리...
+        }
+    }
+}
+```
+
+상세한 벤치마크 결과, 방법론 및 대안 전략은 [성능 벤치마크](docs/BENCHMARKS.ko.md)를 참조하세요.
 
 ## 소켓 타입
 
