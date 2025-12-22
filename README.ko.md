@@ -4,6 +4,7 @@
 # JVM-ZMQ
 
 [![CI - Build and Test](https://github.com/ulala-x/jvm-zmq/actions/workflows/ci.yml/badge.svg)](https://github.com/ulala-x/jvm-zmq/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/ulala-x/jvm-zmq)](https://github.com/ulala-x/jvm-zmq/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![API Documentation](https://img.shields.io/badge/API-Documentation-blue)](https://ulala-x.github.io/jvm-zmq/)
 
@@ -450,6 +451,26 @@ jvm-zmq/
 - **[API 문서](https://ulala-x.github.io/jvm-zmq/)** - 완전한 Javadoc API 레퍼런스
 - **[성능 벤치마크](docs/BENCHMARKS.ko.md)** - 상세한 벤치마크 결과 및 분석
 - **[샘플 코드](zmq-samples/README.ko.md)** - 13개의 샘플 애플리케이션
+
+## 변경 로그
+
+### v0.2 (예정)
+- **Breaking Change**: Socket API를 .NET 스타일로 단순화
+  - `send()`가 이제 `boolean` 반환 (true=성공, false=EAGAIN)
+  - `recv()`가 이제 `int` 반환 (수신된 바이트 수, -1=EAGAIN)
+  - 실제 에러는 `ZmqException` throw
+- 논블로킹 작업을 위한 `tryRecv()` 편의 메서드 추가
+- `SendResult` 및 `RecvResult` wrapper 클래스 삭제
+- `recvBytes()` 메서드 삭제 (`recv(buffer)` 사용 권장)
+- 성능: 회귀 없음, 더 깔끔한 API
+
+### v0.1
+- 초기 릴리즈
+- ZeroMQ용 Java 22 FFM API 바인딩
+- 모든 소켓 타입 지원 (REQ, REP, PUB, SUB, PUSH, PULL, DEALER, ROUTER, PAIR, XPUB, XSUB, STREAM)
+- CURVE 보안 지원
+- 크로스 플랫폼 네이티브 라이브러리 (Windows, Linux, macOS - x64/ARM64)
+- 종합적인 벤치마크 및 샘플
 
 ## 라이선스
 

@@ -4,6 +4,7 @@
 # JVM-ZMQ
 
 [![CI - Build and Test](https://github.com/ulala-x/jvm-zmq/actions/workflows/ci.yml/badge.svg)](https://github.com/ulala-x/jvm-zmq/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/ulala-x/jvm-zmq)](https://github.com/ulala-x/jvm-zmq/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![API Documentation](https://img.shields.io/badge/API-Documentation-blue)](https://ulala-x.github.io/jvm-zmq/)
 
@@ -450,6 +451,26 @@ jvm-zmq/
 - **[API Documentation](https://ulala-x.github.io/jvm-zmq/)** - Complete Javadoc API reference
 - **[Performance Benchmarks](docs/BENCHMARKS.md)** - Detailed benchmark results and analysis
 - **[Sample Code](zmq-samples/)** - 13 sample applications
+
+## Changelog
+
+### v0.2 (Upcoming)
+- **Breaking Change**: Simplified Socket API to .NET style
+  - `send()` now returns `boolean` (true=success, false=EAGAIN)
+  - `recv()` now returns `int` (bytes received, -1=EAGAIN)
+  - Real errors throw `ZmqException`
+- Added `tryRecv()` convenience methods for non-blocking operations
+- Removed `SendResult` and `RecvResult` wrapper classes
+- Removed `recvBytes()` methods (use `recv(buffer)` instead)
+- Performance: No regression, cleaner API
+
+### v0.1
+- Initial release
+- Java 22 FFM API bindings for ZeroMQ
+- All socket types supported (REQ, REP, PUB, SUB, PUSH, PULL, DEALER, ROUTER, PAIR, XPUB, XSUB, STREAM)
+- CURVE security support
+- Cross-platform native libraries (Windows, Linux, macOS - x64/ARM64)
+- Comprehensive benchmarks and samples
 
 ## License
 
