@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 
 /**
- * Compares four memory management strategies for ZMQ message sending:
+ * Compares four message buffer strategies for ZMQ message sending:
  * 1. ByteArray: Allocate new byte[] every time (baseline, high GC pressure)
  * 2. ArrayPool: Use Netty PooledByteBufAllocator (low GC pressure)
  * 3. Message: Use Message objects with native memory (medium GC pressure)
@@ -28,7 +28,7 @@ import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 @Fork(value = 1, jvmArgs = {"-XX:+UseG1GC", "-Xms2g", "-Xmx2g"})
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
-public class MemoryStrategyBenchmark {
+public class MessageBufferStrategyBenchmark {
 
     @State(Scope.Thread)
     public static class RouterState {
