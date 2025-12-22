@@ -217,19 +217,34 @@ try (Context ctx = new Context();
 
 JMH 벤치마크 결과 (Router-to-Router 패턴, 반복당 10,000개 메시지):
 
-### 권장 사항
+### 메시지 버퍼 전략
 
-**메시지 버퍼 전략:**
-- 버퍼 풀링을 위해 `PooledByteBufAllocator` (Netty) 사용 - 큰 메시지에서 GC 압력 99%+ 감소
-- 작은 메시지 (<512B)의 경우 단순 `byte[]`가 최고 처리량 제공 (64B에서 2.89M msg/sec)
+| 전략 | 64B | 512B | 1KB | 64KB | GC 압력 |
+|------|-----|------|-----|------|---------|
+| **ArrayPool (권장)** | 1.29M msg/s | 1.28M msg/s | 985K msg/s | 78K msg/s | 낮음 |
+| ByteArray | 1.71M msg/s | 1.33M msg/s | 1.04M msg/s | 72K msg/s | 높음 |
+| Message | 1.06M msg/s | 994K msg/s | 997K msg/s | 78K msg/s | 중간 |
 
-**수신 모드:**
-- 단일 소켓: 블로킹 `recv()` 사용 - 가장 간단하고 빠름
-- 다중 소켓: `Poller` 사용 - 블로킹과 동일한 성능 + 이벤트 기반 I/O
+**권장: `PooledByteBufAllocator` (Netty)**
+- 모든 메시지 크기에서 일정한 ~178KB 메모리 할당
+- 64KB 메시지에서 ByteArray 대비 **99.99% 적은 메모리** 사용
+- 장시간 운영 서버에 적합
+
+### 수신 모드
+
+| 모드 | 64B | 512B | 1KB | 64KB |
+|------|-----|------|-----|------|
+| **PureBlocking** | 1.48M msg/s | 1.36M msg/s | 1.10M msg/s | 70K msg/s |
+| **Poller** | 1.48M msg/s | 1.34M msg/s | 1.10M msg/s | 68K msg/s |
+| NonBlocking | 1.38M msg/s | 1.27M msg/s | 943K msg/s | 44K msg/s |
+
+**권장:**
+- 단일 소켓 → Blocking `recv()`
+- 다중 소켓 → `Poller`
 
 ### 권장 패턴
 
-큰 메시지를 처리하거나 낮은 GC 압력이 필요한 프로덕션 애플리케이션:
+프로덕션 환경에서 권장하는 고성능 수신 패턴:
 
 ```java
 import io.github.ulalax.zmq.*;
@@ -451,26 +466,6 @@ jvm-zmq/
 - **[API 문서](https://ulala-x.github.io/jvm-zmq/)** - 완전한 Javadoc API 레퍼런스
 - **[성능 벤치마크](docs/BENCHMARKS.ko.md)** - 상세한 벤치마크 결과 및 분석
 - **[샘플 코드](zmq-samples/README.ko.md)** - 13개의 샘플 애플리케이션
-
-## 변경 로그
-
-### v0.2 (예정)
-- **Breaking Change**: Socket API를 .NET 스타일로 단순화
-  - `send()`가 이제 `boolean` 반환 (true=성공, false=EAGAIN)
-  - `recv()`가 이제 `int` 반환 (수신된 바이트 수, -1=EAGAIN)
-  - 실제 에러는 `ZmqException` throw
-- 논블로킹 작업을 위한 `tryRecv()` 편의 메서드 추가
-- `SendResult` 및 `RecvResult` wrapper 클래스 삭제
-- `recvBytes()` 메서드 삭제 (`recv(buffer)` 사용 권장)
-- 성능: 회귀 없음, 더 깔끔한 API
-
-### v0.1
-- 초기 릴리즈
-- ZeroMQ용 Java 22 FFM API 바인딩
-- 모든 소켓 타입 지원 (REQ, REP, PUB, SUB, PUSH, PULL, DEALER, ROUTER, PAIR, XPUB, XSUB, STREAM)
-- CURVE 보안 지원
-- 크로스 플랫폼 네이티브 라이브러리 (Windows, Linux, macOS - x64/ARM64)
-- 종합적인 벤치마크 및 샘플
 
 ## 라이선스
 

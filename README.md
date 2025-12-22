@@ -217,19 +217,34 @@ try (Context ctx = new Context();
 
 Based on JMH benchmarks (Router-to-Router pattern, 10,000 messages per iteration):
 
-### Recommendations
+### Message Buffer Strategy
 
-**Message Buffer Strategy:**
-- Use `PooledByteBufAllocator` (Netty) for buffer pooling - reduces GC pressure by 99%+ for large messages
-- For small messages (<512B), simple `byte[]` offers the highest throughput (2.89M msg/sec @ 64B)
+| Strategy | 64B | 512B | 1KB | 64KB | GC Pressure |
+|----------|-----|------|-----|------|-------------|
+| **ArrayPool (Recommended)** | 1.29M msg/s | 1.28M msg/s | 985K msg/s | 78K msg/s | Low |
+| ByteArray | 1.71M msg/s | 1.33M msg/s | 1.04M msg/s | 72K msg/s | High |
+| Message | 1.06M msg/s | 994K msg/s | 997K msg/s | 78K msg/s | Medium |
 
-**Receive Mode:**
-- Single socket: Use blocking `recv()` - simplest and fastest
-- Multiple sockets: Use `Poller` - same performance as blocking with event-driven I/O
+**Recommended: `PooledByteBufAllocator` (Netty)**
+- Consistent ~178KB memory allocation across all message sizes
+- **99.99% less memory** than ByteArray for 64KB messages
+- Ideal for long-running servers
+
+### Receive Mode
+
+| Mode | 64B | 512B | 1KB | 64KB |
+|------|-----|------|-----|------|
+| **PureBlocking** | 1.48M msg/s | 1.36M msg/s | 1.10M msg/s | 70K msg/s |
+| **Poller** | 1.48M msg/s | 1.34M msg/s | 1.10M msg/s | 68K msg/s |
+| NonBlocking | 1.38M msg/s | 1.27M msg/s | 943K msg/s | 44K msg/s |
+
+**Recommended:**
+- Single socket → Blocking `recv()`
+- Multiple sockets → `Poller`
 
 ### Recommended Pattern
 
-For production applications handling large messages or requiring low GC pressure:
+High-performance receiver pattern for production:
 
 ```java
 import io.github.ulalax.zmq.*;
@@ -451,26 +466,6 @@ jvm-zmq/
 - **[API Documentation](https://ulala-x.github.io/jvm-zmq/)** - Complete Javadoc API reference
 - **[Performance Benchmarks](docs/BENCHMARKS.md)** - Detailed benchmark results and analysis
 - **[Sample Code](zmq-samples/)** - 13 sample applications
-
-## Changelog
-
-### v0.2 (Upcoming)
-- **Breaking Change**: Simplified Socket API to .NET style
-  - `send()` now returns `boolean` (true=success, false=EAGAIN)
-  - `recv()` now returns `int` (bytes received, -1=EAGAIN)
-  - Real errors throw `ZmqException`
-- Added `tryRecv()` convenience methods for non-blocking operations
-- Removed `SendResult` and `RecvResult` wrapper classes
-- Removed `recvBytes()` methods (use `recv(buffer)` instead)
-- Performance: No regression, cleaner API
-
-### v0.1
-- Initial release
-- Java 22 FFM API bindings for ZeroMQ
-- All socket types supported (REQ, REP, PUB, SUB, PUSH, PULL, DEALER, ROUTER, PAIR, XPUB, XSUB, STREAM)
-- CURVE security support
-- Cross-platform native libraries (Windows, Linux, macOS - x64/ARM64)
-- Comprehensive benchmarks and samples
 
 ## License
 
