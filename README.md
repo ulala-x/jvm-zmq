@@ -40,7 +40,7 @@ repositories {
 }
 
 dependencies {
-    implementation("io.github.ulalax:zmq:0.1")
+    implementation("io.github.ulalax:zmq:0.2")
 }
 ```
 
@@ -57,7 +57,7 @@ dependencies {
 <dependency>
     <groupId>io.github.ulalax</groupId>
     <artifactId>zmq</artifactId>
-    <version>0.1</version>
+    <version>0.2</version>
 </dependency>
 ```
 
