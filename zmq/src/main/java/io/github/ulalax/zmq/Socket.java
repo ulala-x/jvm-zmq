@@ -278,6 +278,57 @@ public final class Socket implements AutoCloseable {
     }
 
     /**
+     * Sends a portion of a byte array on the socket.
+     * Useful when using pooled buffers where the backing array may be larger than the data.
+     * @param data The byte array containing the data
+     * @param length The number of bytes to send (starting from index 0)
+     * @param flags Send flags
+     * @return {@code true} if sent successfully, {@code false} if would block (EAGAIN)
+     * @throws NullPointerException if data is null
+     * @throws IllegalArgumentException if length is negative or greater than data.length
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     */
+    public boolean send(byte[] data, int length, SendFlags flags) {
+        if (data == null) {
+            throw new NullPointerException("data cannot be null");
+        }
+        if (length < 0 || length > data.length) {
+            throw new IllegalArgumentException("length must be between 0 and data.length");
+        }
+        // Expand buffer if needed
+        if (length > sendBufferSize) {
+            sendBuffer = ioArena.allocate(length);
+            sendBufferSize = length;
+        }
+        MemorySegment.copy(data, 0, sendBuffer, ValueLayout.JAVA_BYTE, 0, length);
+        int result = LibZmq.send(getHandle(), sendBuffer, length, flags.getValue());
+        if (result == -1) {
+            int errno = LibZmq.errno();
+            if (errno == ZmqConstants.EAGAIN) {
+                return false;  // Would block
+            }
+            throw new ZmqException(errno);  // Real error
+        }
+
+        // Track buffer usage for adaptive sizing
+        sendBufferTotalUsed += length;
+        sendBufferUsageCount++;
+
+        if (sendBufferUsageCount >= BUFFER_USAGE_SAMPLE_SIZE) {
+            long avgUsed = sendBufferTotalUsed / sendBufferUsageCount;
+            if (shouldResetBuffer(sendBufferSize, avgUsed)) {
+                int newSize = (int) (avgUsed * 2) + 1024;
+                sendBuffer = ioArena.allocate(newSize);
+                sendBufferSize = newSize;
+            }
+            sendBufferUsageCount = 0;
+            sendBufferTotalUsed = 0;
+        }
+
+        return true;
+    }
+
+    /**
      * Sends a UTF-8 string on the socket.
      * @param text The text to send
      * @param flags Send flags
@@ -443,6 +494,57 @@ public final class Socket implements AutoCloseable {
     }
 
     /**
+     * Receives data into a portion of a byte array.
+     * Useful when using pooled buffers where the backing array may be larger than needed.
+     * @param buffer The byte array to receive into
+     * @param length The maximum number of bytes to receive
+     * @param flags Receive flags
+     * @return Number of bytes received, or {@link #NO_MESSAGE} if would block (EAGAIN)
+     * @throws NullPointerException if buffer is null
+     * @throws IllegalArgumentException if length is negative or greater than buffer.length
+     * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
+     */
+    public int recv(byte[] buffer, int length, RecvFlags flags) {
+        if (buffer == null) {
+            throw new NullPointerException("buffer cannot be null");
+        }
+        if (length < 0 || length > buffer.length) {
+            throw new IllegalArgumentException("length must be between 0 and buffer.length");
+        }
+        // Expand internal buffer if needed
+        if (length > recvBufferSize) {
+            recvBuffer = ioArena.allocate(length);
+            recvBufferSize = length;
+        }
+        int result = LibZmq.recv(getHandle(), recvBuffer, length, flags.getValue());
+        if (result == -1) {
+            int errno = LibZmq.errno();
+            if (errno == ZmqConstants.EAGAIN) {
+                return -1;  // Would block
+            }
+            throw new ZmqException(errno);  // Real error
+        }
+        MemorySegment.copy(recvBuffer, ValueLayout.JAVA_BYTE, 0, buffer, 0, result);
+
+        // Track buffer usage for adaptive sizing
+        recvBufferTotalUsed += result;
+        recvBufferUsageCount++;
+
+        if (recvBufferUsageCount >= BUFFER_USAGE_SAMPLE_SIZE) {
+            long avgUsed = recvBufferTotalUsed / recvBufferUsageCount;
+            if (shouldResetBuffer(recvBufferSize, avgUsed)) {
+                int newSize = (int) (avgUsed * 2) + 1024;
+                recvBuffer = ioArena.allocate(newSize);
+                recvBufferSize = newSize;
+            }
+            recvBufferUsageCount = 0;
+            recvBufferTotalUsed = 0;
+        }
+
+        return result;
+    }
+
+    /**
      * Receives a message.
      * @param message The message to receive into
      * @param flags Receive flags
@@ -459,6 +561,76 @@ public final class Socket implements AutoCloseable {
             throw new ZmqException(errno);  // Real error
         }
         return result;
+    }
+
+    /**
+     * Receives data into a pooled message with expected size validation.
+     *
+     * <p>This method is optimized for use with {@link MessagePool} when the expected
+     * message size is known in advance. It receives data directly into the message's
+     * native buffer without intermediate copies.</p>
+     *
+     * @param message A message obtained from {@link MessagePool#rent(int)}
+     * @param expectedSize The expected size of incoming data
+     * @param flags Receive flags
+     * @return Number of bytes received, or {@link #NO_MESSAGE} if non-blocking and no message available
+     * @throws ZmqException if buffer size is too small (EBUFFERSMALL)
+     * @throws ZmqException if received size doesn't match expected (ESIZEMISMATCH)
+     * @throws ZmqException on other ZMQ errors
+     * @throws IllegalStateException if socket is closed
+     *
+     * @see MessagePool#rent(int)
+     */
+    public int recv(Message message, int expectedSize, RecvFlags flags) {
+        // 1. 버퍼 크기 검증
+        if (message.getBufferSize() < expectedSize) {
+            throw new ZmqException(ZmqConstants.EBUFFERSMALL,
+                "Buffer size " + message.getBufferSize() + " is smaller than expected " + expectedSize);
+        }
+
+        // 2. 네이티브 포인터로 직접 수신 (zmq_recv)
+        int actualSize = LibZmq.recv(getHandle(), message.getPoolDataPtr(),
+                                      message.getBufferSize(), flags.getValue());
+
+        // 3. 에러 처리
+        if (actualSize == -1) {
+            int errno = LibZmq.errno();
+            if (errno == ZmqConstants.EAGAIN) {
+                return NO_MESSAGE;
+            }
+            throw new ZmqException(errno);
+        }
+
+        // 4. 크기 검증
+        if (actualSize != expectedSize) {
+            throw new ZmqException(ZmqConstants.ESIZEMISMATCH,
+                "Received size " + actualSize + " does not match expected " + expectedSize);
+        }
+
+        // 5. actualDataSize 설정
+        message.setActualDataSize(actualSize);
+
+        return actualSize;
+    }
+
+    /**
+     * Receives data into a pooled message with expected size validation (blocking).
+     *
+     * <p>This is a convenience method that calls {@link #recv(Message, int, RecvFlags)}
+     * with {@link RecvFlags#NONE}.</p>
+     *
+     * @param message A message obtained from {@link MessagePool#rent(int)}
+     * @param expectedSize The expected size of incoming data
+     * @return Number of bytes received
+     * @throws ZmqException if buffer size is too small (EBUFFERSMALL)
+     * @throws ZmqException if received size doesn't match expected (ESIZEMISMATCH)
+     * @throws ZmqException on other ZMQ errors
+     * @throws IllegalStateException if socket is closed
+     *
+     * @see MessagePool#rent(int)
+     */
+    public int recv(Message message, int expectedSize) {
+        return recv(message, expectedSize, RecvFlags.NONE);
     }
 
 
