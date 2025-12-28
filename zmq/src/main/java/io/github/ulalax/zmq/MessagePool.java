@@ -241,7 +241,7 @@ public final class MessagePool {
         if (msg != null) {
             poolHits.incrementAndGet();
             msg.prepareForReuse();
-            msg.actualDataSize = size; // Set directly without calling zmq_msg_init_data
+            msg.setActualDataSize(size); // Initialize zmq_msg_t with zmq_msg_init_data
             return msg;
         }
 
@@ -251,7 +251,7 @@ public final class MessagePool {
             pooledMessageCounts[bucketIndex].decrementAndGet();
             poolHits.incrementAndGet();
             msg.prepareForReuse();
-            msg.actualDataSize = size; // Set directly without calling zmq_msg_init_data
+            msg.setActualDataSize(size); // Initialize zmq_msg_t with zmq_msg_init_data
             return msg;
         }
 

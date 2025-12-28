@@ -643,13 +643,9 @@ public final class Message implements AutoCloseable {
     int send(MemorySegment socket, SendFlags flags) {
         ensureInitialized();
 
-        // For pooled messages: ensure zmq_msg_init_data is called before sending
-        if (isFromPool && needsReinitialization) {
-            setActualDataSize(actualDataSize); // Reuse setActualDataSize to avoid code duplication
-        }
-
         // Use zmq_msg_send for all messages (zero-copy for pooled messages)
-        // For pooled messages: callback will return to pool when ZMQ is done
+        // For pooled messages: user should call setActualDataSize() before send
+        // Callback will return to pool when ZMQ is done
         int result = LibZmq.msgSend(msgSegment, socket, flags.getValue());
         ZmqException.throwIfError(result);
 

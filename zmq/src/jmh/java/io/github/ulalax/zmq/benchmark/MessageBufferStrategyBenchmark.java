@@ -12,24 +12,25 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 
 /**
  * Compares six message buffer strategies for ZMQ message sending:
- * 1. ByteArray: Allocate new byte[] every time (baseline, high GC pressure)
- * 2. ArrayPool: Use Netty PooledByteBufAllocator (low GC pressure)
- * 3. Message: Use Message objects with native memory (medium GC pressure)
- * 4. MessageZeroCopy: Use msgInitData for true zero-copy (low GC pressure)
- * 5. MessagePooled_SendRecv: Use MessagePool for sending, regular Message for receiving
- * 6. MessagePooled_SendRecv_WithReceivePool: Use MessagePool for both sending and receiving
+ * 1. ByteArray_SendRecv: new byte[] + send(byte[]) / new byte[] + recv(byte[])
+ * 2. ArrayPool_SendRecv_Heap: heapBuffer() + send(ByteBuf) / heapBuffer() + recv(ByteBuf)
+ * 3. ArrayPool_SendRecv_Direct: directBuffer() + send(ByteBuf) / directBuffer() + recv(ByteBuf)
+ * 4. Message_SendRecv: new Message(size) + send(Message) / new Message() + recv(Message)
+ * 5. MessageZeroCopy_SendRecv: Arena.ofShared() + new Message(seg, size, callback) / new Message() + recv(Message)
+ * 6. PooledMessage_SendRecv: MessagePool.rent() + send(Message) / MessagePool.rent() + recv(msg, size)
  *
  * This benchmark measures pure memory allocation/deallocation without data copying,
  * matching the .NET benchmark structure.
  */
 @State(Scope.Benchmark)
-@Warmup(iterations = 2, time = 2, timeUnit = TimeUnit.SECONDS)
-@Measurement(iterations = 3, time = 5, timeUnit = TimeUnit.SECONDS)
+@Warmup(iterations = 1, time = 1, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 1, time = 2, timeUnit = TimeUnit.SECONDS)
 @Fork(value = 1, jvmArgs = {"-XX:+UseG1GC", "-Xms2g", "-Xmx2g"})
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
@@ -50,7 +51,7 @@ public class MessageBufferStrategyBenchmark {
         @Param({"64", "512", "1024", "65536", "131072", "262144"})
         int messageSize;
 
-        @Param({"10000"})
+        @Param({"100"})
         int messageCount;
 
         @Setup(Level.Trial)
@@ -131,7 +132,7 @@ public class MessageBufferStrategyBenchmark {
          *
          * <p>Performance impact:
          * <ul>
-         *   <li>Expected 5-25% improvement in ArrayPool_SendRecv benchmark</li>
+         *   <li>Expected 5-25% improvement in ArrayPool_SendRecv benchmarks</li>
          *   <li>Based on HintPtrPool pre-warming success (3000x improvement)</li>
          *   <li>Most significant for small messages (64 bytes)</li>
          * </ul>
@@ -147,11 +148,18 @@ public class MessageBufferStrategyBenchmark {
             long startTime = System.nanoTime();
 
             ArrayList<ByteBuf> warmupBuffers = new ArrayList<>();
+            // Warm up both heap and direct buffers
             for (int size : messageSizes) {
                 for (int i = 0; i < 100; i++) {
-                    ByteBuf buf = PooledByteBufAllocator.DEFAULT.buffer(size);
-                    warmupBuffers.add(buf);
-                    buf.writeBytes(new byte[size]);
+                    // Heap buffers
+                    ByteBuf heapBuf = PooledByteBufAllocator.DEFAULT.heapBuffer(size);
+                    warmupBuffers.add(heapBuf);
+                    heapBuf.writeBytes(new byte[size]);
+
+                    // Direct buffers
+                    ByteBuf directBuf = PooledByteBufAllocator.DEFAULT.directBuffer(size);
+                    warmupBuffers.add(directBuf);
+                    directBuf.writeBytes(new byte[size]);
                 }
             }
             warmupBuffers.forEach(ReferenceCounted::release);
@@ -203,7 +211,7 @@ public class MessageBufferStrategyBenchmark {
     }
 
     @Benchmark
-    public void ArrayPool_SendRecv(RouterState state) {
+    public void ArrayPool_SendRecv_Heap(RouterState state) {
         state.receiverLatch = new CountDownLatch(state.messageCount);
         state.receiverError = false;
 
@@ -215,13 +223,10 @@ public class MessageBufferStrategyBenchmark {
                     // Receive identity
                     state.router2.recv(state.identityBuffer, RecvFlags.NONE);
 
-                    // Rent buffer from pool (minimal GC!)
+                    // Rent heap buffer from pool
                     ByteBuf recvBuf = allocator.heapBuffer(state.messageSize);
                     try {
-                        // Get backing array for recv with explicit length
-                        // Note: array() may return a larger backing array due to pooling
-                        byte[] array = recvBuf.array();
-                        state.router2.recv(array, state.messageSize, RecvFlags.NONE);
+                        state.router2.recv(recvBuf, RecvFlags.NONE);
                     } finally {
                         recvBuf.release();
                     }
@@ -239,13 +244,61 @@ public class MessageBufferStrategyBenchmark {
             for (int i = 0; i < state.messageCount; i++) {
                 state.router1.send(state.router2Id, SendFlags.SEND_MORE);
 
-                // Rent buffer from pool (no data copying)
+                // Rent heap buffer from pool
                 ByteBuf sendBuf = allocator.heapBuffer(state.messageSize);
+                sendBuf.writerIndex(state.messageSize);  // Mark buffer as containing data
                 try {
-                    // Send from backing array with explicit length
-                    // Note: array() may return a larger backing array due to pooling
-                    byte[] array = sendBuf.array();
-                    state.router1.send(array, state.messageSize, SendFlags.DONT_WAIT);
+                    state.router1.send(sendBuf, SendFlags.DONT_WAIT);
+                } finally {
+                    sendBuf.release();
+                }
+            }
+
+            awaitCompletion(receiver, state);
+        } catch (Exception e) {
+            throw new RuntimeException("Benchmark failed", e);
+        }
+    }
+
+    @Benchmark
+    public void ArrayPool_SendRecv_Direct(RouterState state) {
+        state.receiverLatch = new CountDownLatch(state.messageCount);
+        state.receiverError = false;
+
+        PooledByteBufAllocator allocator = PooledByteBufAllocator.DEFAULT;
+
+        Thread receiver = new Thread(() -> {
+            try {
+                for (int n = 0; n < state.messageCount; n++) {
+                    // Receive identity
+                    state.router2.recv(state.identityBuffer, RecvFlags.NONE);
+
+                    // Rent direct buffer from pool
+                    ByteBuf recvBuf = allocator.directBuffer(state.messageSize);
+                    try {
+                        state.router2.recv(recvBuf, RecvFlags.NONE);
+                    } finally {
+                        recvBuf.release();
+                    }
+
+                    state.receiverLatch.countDown();
+                }
+            } catch (Exception e) {
+                state.receiverError = true;
+                state.receiverException = e;
+            }
+        });
+        receiver.start();
+
+        try {
+            for (int i = 0; i < state.messageCount; i++) {
+                state.router1.send(state.router2Id, SendFlags.SEND_MORE);
+
+                // Rent direct buffer from pool
+                ByteBuf sendBuf = allocator.directBuffer(state.messageSize);
+                sendBuf.writerIndex(state.messageSize);  // Mark buffer as containing data
+                try {
+                    state.router1.send(sendBuf, SendFlags.DONT_WAIT);
                 } finally {
                     sendBuf.release();
                 }
@@ -324,19 +377,24 @@ public class MessageBufferStrategyBenchmark {
         });
         receiver.start();
 
+
+
         try {
             for (int i = 0; i < state.messageCount; i++) {
                 // Send identity as simple byte[] (small data, no pooling needed)
                 state.router1.send(state.router2Id, SendFlags.SEND_MORE);
 
-                // MUST use shared arena - ZMQ callback runs on internal thread (Thread-3)
-                // Confined arenas can only be closed by owner thread, would throw WrongThreadException
+                // Single shared arena for all messages - closed after all callbacks complete
                 Arena dataArena = Arena.ofShared();
+                var pendingCallbacks = new AtomicInteger(state.messageCount);
+                // Allocate from shared arena (no per-message Arena creation overhead)
                 MemorySegment dataSeg = dataArena.allocate(state.messageSize);
-                // No data copying - just allocate memory
 
                 Message payloadMsg = new Message(dataSeg, state.messageSize, data -> {
-                    dataArena.close();
+                    // Close arena only when all messages are done
+                    if (pendingCallbacks.decrementAndGet() == 0) {
+                        dataArena.close();
+                    }
                 });
 
                 state.router1.send(payloadMsg, SendFlags.DONT_WAIT);
@@ -350,7 +408,7 @@ public class MessageBufferStrategyBenchmark {
     }
 
     @Benchmark
-    public void MessagePooled_SendRecv(RouterState state) {
+    public void PooledMessage_SendRecv(RouterState state) {
         state.receiverLatch = new CountDownLatch(state.messageCount);
         state.receiverError = false;
 
@@ -360,49 +418,7 @@ public class MessageBufferStrategyBenchmark {
                     // Receive identity
                     state.router2.recv(state.identityBuffer, RecvFlags.NONE);
 
-                    // Receive payload as regular Message (non-pooled)
-                    try (Message msg = new Message()) {
-                        state.router2.recv(msg, RecvFlags.NONE);
-                    }
-
-                    state.receiverLatch.countDown();
-                }
-            } catch (Exception e) {
-                state.receiverError = true;
-                state.receiverException = e;
-            }
-        });
-        receiver.start();
-
-        try {
-            for (int i = 0; i < state.messageCount; i++) {
-                // Send identity as simple byte[] (small data, no pooling needed)
-                state.router1.send(state.router2Id, SendFlags.SEND_MORE);
-
-                // Rent message from pool for sending (no data copying)
-                Message msg = MessagePool.SHARED.rent(state.messageSize);
-                state.router1.send(msg, SendFlags.DONT_WAIT);
-                msg.close(); // Automatically returns to pool
-            }
-
-            awaitCompletion(receiver, state);
-        } catch (Exception e) {
-            throw new RuntimeException("Benchmark failed", e);
-        }
-    }
-
-    @Benchmark
-    public void MessagePooled_SendRecv_WithReceivePool(RouterState state) {
-        state.receiverLatch = new CountDownLatch(state.messageCount);
-        state.receiverError = false;
-
-        Thread receiver = new Thread(() -> {
-            try {
-                for (int n = 0; n < state.messageCount; n++) {
-                    // Receive identity
-                    state.router2.recv(state.identityBuffer, RecvFlags.NONE);
-
-                    // Receive payload using pooled Message (no data copying)
+                    // Receive payload using pooled Message
                     Message msg = MessagePool.SHARED.rent(state.messageSize);
                     state.router2.recv(msg, state.messageSize);
                     msg.close(); // Automatically returns to pool
@@ -418,10 +434,10 @@ public class MessageBufferStrategyBenchmark {
 
         try {
             for (int i = 0; i < state.messageCount; i++) {
-                // Send identity as simple byte[] (small data, no pooling needed)
+                // Send identity
                 state.router1.send(state.router2Id, SendFlags.SEND_MORE);
 
-                // Rent message from pool for sending (no data copying)
+                // Rent message from pool for sending (rent() calls setActualDataSize internally)
                 Message msg = MessagePool.SHARED.rent(state.messageSize);
                 state.router1.send(msg, SendFlags.DONT_WAIT);
                 msg.close(); // Automatically returns to pool

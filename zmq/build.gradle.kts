@@ -9,12 +9,12 @@ dependencies {
     // Depend on zmq-core
     api(project(":zmq-core"))
 
+    // Netty for ByteBuf support
+    api("io.netty:netty-buffer:4.1.100.Final")
+
     // JMH dependencies
     jmhImplementation("org.openjdk.jmh:jmh-core:1.37")
     jmhAnnotationProcessor("org.openjdk.jmh:jmh-generator-annprocess:1.37")
-
-    // Netty for PooledByteBufAllocator (benchmark only)
-    jmhImplementation("io.netty:netty-buffer:4.1.100.Final")
 }
 
 tasks.jar {
@@ -34,9 +34,9 @@ jmh {
     // JMH version
     jmhVersion.set("1.37")
 
-    // Benchmark parameters
-    warmupIterations.set(3)
-    iterations.set(5)
+    // Benchmark parameters (use annotation values by default)
+    warmupIterations.set(1)
+    iterations.set(1)
     fork.set(1)
     threads.set(1)
 
@@ -70,104 +70,142 @@ tasks.register("formatJmhResults") {
         val json = groovy.json.JsonSlurper().parse(resultsFile) as List<Map<String, Any>>
         val output = StringBuilder()
 
-        output.appendLine("\n" + "=".repeat(72))
-        output.appendLine("Router-to-Router Throughput Benchmark Results")
-        output.appendLine("=".repeat(72))
+        output.appendLine("\n" + "=".repeat(155))
+        output.appendLine("JMH Benchmark Results")
+        output.appendLine("=".repeat(155))
 
         // Table header
-        output.appendLine("Message Size | Throughput (msg/sec) |  Latency (μs)  | JMH Score (ops/s)")
-        output.appendLine("-".repeat(72))
+        output.appendLine(String.format("%-45s | %9s | %22s | %10s | %12s | %12s | %10s | %8s",
+            "Benchmark", "Size", "Throughput (msg/s)", "Latency", "ops/s", "Alloc/op", "GC Rate", "GC Count"))
+        output.appendLine("=".repeat(155))
 
-        // Group by message size and sort
-        val groupedBySize = json.groupBy {
-            (it["params"] as? Map<String, String>)?.get("messageSize")
-        }
-
-        // Data class to hold benchmark metrics for each message size
+        // Data class to hold benchmark metrics
         data class BenchmarkMetrics(
+            val benchmarkName: String,
             val messageSize: Int,
             val throughput: Long,
             val throughputError: Long,
             val latencyUs: Double,
-            val latencyError: Double,
             val jmhScore: Double,
-            val jmhScoreError: Double
+            val jmhScoreError: Double,
+            val gcAllocRate: Double,
+            val gcAllocNorm: Double,
+            val gcCount: Int,
+            val gcTime: Int
         )
 
         val metrics = mutableListOf<BenchmarkMetrics>()
 
-        groupedBySize.toSortedMap(compareBy { it?.toInt() ?: 0 }).forEach { (size, results) ->
-            results.forEach { result ->
-                val mode = result["mode"] as String
-                val metric = result["primaryMetric"] as Map<String, Any>
-                val score = (metric["score"] as Number).toDouble()
-                val error = (metric["scoreError"] as Number).toDouble()
-                val params = result["params"] as? Map<String, String>
-                val messageCount = params?.get("messageCount")?.toIntOrNull() ?: 1
-                val sizeInt = size?.toInt() ?: 0
+        json.forEach { result ->
+            val mode = result["mode"] as String
+            if (mode != "thrpt") return@forEach
 
-                when (mode) {
-                    "thrpt" -> {
-                        // Calculate actual message throughput
-                        // JMH reports ops/s, each op processes messageCount messages
-                        val msgPerSec = (score * messageCount).toLong()
-                        val errorPerSec = (error * messageCount).toLong()
-
-                        // Calculate latency from throughput
-                        // latency_us = 1,000,000 / throughput_msg_per_sec
-                        val latencyUs = 1_000_000.0 / msgPerSec
-                        val latencyError = (1_000_000.0 / msgPerSec) * (errorPerSec.toDouble() / msgPerSec.toDouble())
-
-                        metrics.add(BenchmarkMetrics(
-                            messageSize = sizeInt,
-                            throughput = msgPerSec,
-                            throughputError = errorPerSec,
-                            latencyUs = latencyUs,
-                            latencyError = latencyError,
-                            jmhScore = score,
-                            jmhScoreError = error
-                        ))
-                    }
-                }
+            val benchmarkFull = result["benchmark"] as String
+            val benchmarkMethod = benchmarkFull.substringAfterLast(".")
+            val metric = result["primaryMetric"] as Map<String, Any>
+            val score = (metric["score"] as? Number)?.toDouble() ?: 0.0
+            val error = when (val scoreError = metric["scoreError"]) {
+                is Number -> scoreError.toDouble()
+                is String -> if (scoreError == "NaN") Double.NaN else 0.0
+                else -> 0.0
             }
-        }
+            val params = result["params"] as? Map<String, String> ?: emptyMap()
+            val messageCount = params["messageCount"]?.toIntOrNull() ?: 1
+            val messageSize = params["messageSize"]?.toIntOrNull() ?: 0
+            val receiveMode = params["receiveMode"]
 
-        // Format table rows
-        metrics.forEach { m ->
-            // Format message size with appropriate unit
-            val sizeStr = when {
-                m.messageSize >= 1024 -> String.format("%,7d B", m.messageSize)
-                else -> String.format("%7d B", m.messageSize)
-            }
+            // Get GC metrics
+            val secondaryMetrics = result["secondaryMetrics"] as? Map<String, Any> ?: emptyMap()
+            val gcAllocRateMap = secondaryMetrics["gc.alloc.rate"] as? Map<String, Any>
+            val gcAllocRate = (gcAllocRateMap?.get("score") as? Number)?.toDouble() ?: 0.0
+            val gcAllocNormMap = secondaryMetrics["gc.alloc.rate.norm"] as? Map<String, Any>
+            val gcAllocNorm = (gcAllocNormMap?.get("score") as? Number)?.toDouble() ?: 0.0
+            val gcCountMap = secondaryMetrics["gc.count"] as? Map<String, Any>
+            val gcCount = (gcCountMap?.get("score") as? Number)?.toInt() ?: 0
+            val gcTimeMap = secondaryMetrics["gc.time"] as? Map<String, Any>
+            val gcTime = (gcTimeMap?.get("score") as? Number)?.toInt() ?: 0
 
-            // Format throughput with K suffix for errors
-            val throughputStr = if (m.throughputError >= 1000) {
-                String.format("%,10d (±%dK)", m.throughput, m.throughputError / 1000)
+            // Build benchmark name with optional receiveMode
+            val displayName = if (receiveMode != null) {
+                "$benchmarkMethod [$receiveMode]"
             } else {
-                String.format("%,10d (±%d)", m.throughput, m.throughputError)
+                benchmarkMethod
             }
 
-            // Format latency with appropriate precision
-            val latencyStr = String.format("%6.2f (±%.2f)", m.latencyUs, m.latencyError)
+            // Calculate actual message throughput
+            val msgPerSec = (score * messageCount).toLong()
+            val errorPerSec = if (error.isNaN()) 0L else (error * messageCount).toLong()
 
-            // Format JMH score
-            val jmhScoreStr = String.format("%8.2f (±%.2f)", m.jmhScore, m.jmhScoreError)
+            // Calculate latency from throughput
+            val latencyUs = if (msgPerSec > 0) 1_000_000.0 / msgPerSec else 0.0
 
-            output.appendLine(String.format("%s | %s | %s | %s",
-                sizeStr,
-                throughputStr,
-                latencyStr,
-                jmhScoreStr
+            metrics.add(BenchmarkMetrics(
+                benchmarkName = displayName,
+                messageSize = messageSize,
+                throughput = msgPerSec,
+                throughputError = errorPerSec,
+                latencyUs = latencyUs,
+                jmhScore = score,
+                jmhScoreError = if (error.isNaN()) 0.0 else error,
+                gcAllocRate = gcAllocRate,
+                gcAllocNorm = gcAllocNorm,
+                gcCount = gcCount,
+                gcTime = gcTime
             ))
         }
 
-        output.appendLine("=".repeat(72))
+        // Sort by benchmark name, then by message size
+        metrics.sortedWith(compareBy({ it.benchmarkName }, { it.messageSize })).forEach { m ->
+            // Format size string
+            val sizeStr = String.format("%,d B", m.messageSize)
+
+            // Format throughput with K suffix for errors
+            val throughputStr = if (m.throughputError >= 1000) {
+                String.format("%,d (±%dK)", m.throughput, m.throughputError / 1000)
+            } else {
+                String.format("%,d (±%d)", m.throughput, m.throughputError)
+            }
+
+            // Format latency (μs)
+            val latencyStr = String.format("%.2f μs", m.latencyUs)
+
+            // Format JMH score
+            val opsStr = String.format("%.1f (±%.1f)", m.jmhScore, m.jmhScoreError)
+
+            // Format allocation per operation (B/op)
+            val allocNormStr = when {
+                m.gcAllocNorm >= 1_000_000 -> String.format("%.1f MB", m.gcAllocNorm / 1_000_000)
+                m.gcAllocNorm >= 1_000 -> String.format("%.1f KB", m.gcAllocNorm / 1_000)
+                else -> String.format("%.0f B", m.gcAllocNorm)
+            }
+
+            // Format GC rate (MB/s)
+            val gcRateStr = String.format("%.1f MB/s", m.gcAllocRate)
+
+            // Format GC count
+            val gcCountStr = String.format("%d (%dms)", m.gcCount, m.gcTime)
+
+            output.appendLine(String.format("%-45s | %9s | %22s | %10s | %12s | %12s | %10s | %8s",
+                m.benchmarkName,
+                sizeStr,
+                throughputStr,
+                latencyStr,
+                opsStr,
+                allocNormStr,
+                gcRateStr,
+                gcCountStr
+            ))
+        }
+
+        output.appendLine("=".repeat(155))
         output.appendLine("Legend:")
         output.appendLine("  Throughput: Messages per second (higher is better)")
         output.appendLine("  Latency:    One-way send time in microseconds (lower is better)")
-        output.appendLine("              Calculated as: 1,000,000 / Throughput")
-        output.appendLine("  JMH Score:  Benchmark iterations per second (each = 10,000 messages)")
-        output.appendLine("=".repeat(72) + "\n")
+        output.appendLine("  ops/s:      JMH benchmark iterations per second")
+        output.appendLine("  Alloc/op:   Memory allocated per operation (lower is better)")
+        output.appendLine("  GC Rate:    GC allocation rate in MB/sec (lower is better)")
+        output.appendLine("  GC Count:   Total GC count and time during benchmark")
+        output.appendLine("=".repeat(155) + "\n")
 
         val formattedOutput = output.toString()
         println(formattedOutput)

@@ -1,6 +1,7 @@
 package io.github.ulalax.zmq;
 
 import io.github.ulalax.zmq.core.*;
+import io.netty.buffer.ByteBuf;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
@@ -403,6 +404,57 @@ public final class Socket implements AutoCloseable {
     }
 
     /**
+     * Sends a Netty ByteBuf on the socket.
+     * Supports both heap and direct buffers.
+     * For direct buffers, data is passed directly to ZMQ without Java-side copying.
+     * For heap buffers, data is copied to an internal native buffer before sending.
+     * Note: ZMQ internally copies the data regardless of buffer type.
+     *
+     * @param buf The ByteBuf to send
+     * @param flags Send flags
+     * @return true if sent successfully, false if would block (EAGAIN)
+     * @throws NullPointerException if buf is null
+     * @throws ZmqException if a real ZMQ error occurs
+     */
+    public boolean send(ByteBuf buf, SendFlags flags) {
+        if (buf == null) {
+            throw new NullPointerException("buf cannot be null");
+        }
+        int readable = buf.readableBytes();
+
+        if (buf.isDirect()) {
+            // Direct buffer: pass to ZMQ without Java-side copy
+            ByteBuffer nioBuf = buf.nioBuffer();
+            return send(nioBuf, flags);
+        } else {
+            // Heap buffer: copy to sendBuffer
+            if (readable > sendBufferSize) {
+                sendBuffer = ioArena.allocate(readable);
+                sendBufferSize = readable;
+            }
+            buf.getBytes(buf.readerIndex(), sendBuffer.asByteBuffer().clear().limit(readable));
+            int result = LibZmq.send(getHandle(), sendBuffer, readable, flags.getValue());
+            if (result == -1) {
+                int errno = LibZmq.errno();
+                if (errno == ZmqConstants.EAGAIN) {
+                    return false;
+                }
+                throw new ZmqException(errno);
+            }
+            return true;
+        }
+    }
+
+    /**
+     * Sends a Netty ByteBuf on the socket with default flags.
+     * @param buf The ByteBuf to send
+     * @return true if sent successfully, false if would block
+     */
+    public boolean send(ByteBuf buf) {
+        return send(buf, SendFlags.NONE);
+    }
+
+    /**
      * Sends a message on the socket.
      * @param message The message to send
      * @param flags Send flags
@@ -607,8 +659,8 @@ public final class Socket implements AutoCloseable {
                 "Received size " + actualSize + " does not match expected " + expectedSize);
         }
 
-        // 5. actualDataSize 설정
-        message.setActualDataSize(actualSize);
+        // 5. actualDataSize 설정 (zmq_msg_init_data 호출 없이 필드만 설정)
+        message.actualDataSize = actualSize;
 
         return actualSize;
     }
@@ -631,6 +683,66 @@ public final class Socket implements AutoCloseable {
      */
     public int recv(Message message, int expectedSize) {
         return recv(message, expectedSize, RecvFlags.NONE);
+    }
+
+    /**
+     * Receives data into a Netty ByteBuf.
+     * Supports both heap and direct buffers.
+     * For direct buffers, data is received directly without Java-side copying.
+     * For heap buffers, data is received to an internal buffer then copied.
+     *
+     * @param buf The ByteBuf to receive into (must have writable space)
+     * @param flags Receive flags
+     * @return Number of bytes received, or NO_MESSAGE if would block
+     * @throws NullPointerException if buf is null
+     * @throws ZmqException if a real ZMQ error occurs
+     */
+    public int recv(ByteBuf buf, RecvFlags flags) {
+        if (buf == null) {
+            throw new NullPointerException("buf cannot be null");
+        }
+        int writable = buf.writableBytes();
+
+        if (buf.isDirect()) {
+            // Direct buffer: receive directly
+            ByteBuffer nioBuf = buf.nioBuffer(buf.writerIndex(), writable);
+            int result = LibZmq.recv(getHandle(), MemorySegment.ofBuffer(nioBuf), writable, flags.getValue());
+            if (result == -1) {
+                int errno = LibZmq.errno();
+                if (errno == ZmqConstants.EAGAIN) {
+                    return NO_MESSAGE;
+                }
+                throw new ZmqException(errno);
+            }
+            buf.writerIndex(buf.writerIndex() + result);
+            return result;
+        } else {
+            // Heap buffer: receive to recvBuffer, then copy
+            if (writable > recvBufferSize) {
+                recvBuffer = ioArena.allocate(writable);
+                recvBufferSize = writable;
+            }
+            int result = LibZmq.recv(getHandle(), recvBuffer, writable, flags.getValue());
+            if (result == -1) {
+                int errno = LibZmq.errno();
+                if (errno == ZmqConstants.EAGAIN) {
+                    return NO_MESSAGE;
+                }
+                throw new ZmqException(errno);
+            }
+            buf.setBytes(buf.writerIndex(), recvBuffer.asByteBuffer().clear().limit(result));
+            buf.writerIndex(buf.writerIndex() + result);
+            return result;
+        }
+    }
+
+    /**
+     * Receives data into a Netty ByteBuf with default flags.
+     * @param buf The ByteBuf to receive into
+     * @return Number of bytes received, or NO_MESSAGE if would block
+     */
+    public int recv(ByteBuf buf) {
+        return recv(buf, RecvFlags.NONE);
     }
 
 
