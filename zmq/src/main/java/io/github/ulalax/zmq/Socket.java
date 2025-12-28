@@ -462,6 +462,32 @@ public final class Socket implements AutoCloseable {
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      */
     public boolean send(Message message, SendFlags flags) {
+        // Pooled message: zmq_send() 직접 사용 (FFM 1회만 호출)
+        if (message.isFromPool) {
+            int result = LibZmq.send(
+                getHandle(),
+                message.getPoolDataPtr(),
+                message.actualDataSize,
+                flags.getValue()
+            );
+
+            if (result == -1) {
+                int errno = LibZmq.errno();
+                if (errno == ZmqConstants.EAGAIN) {
+                    return false;
+                }
+                throw new ZmqException(errno);
+            }
+
+            // 전송 성공 후 풀로 반환 (중복 방지)
+            if (!message.returnedToPool) {
+                message.returnedToPool = true;
+                MessagePool.SHARED.returnMessage(message);
+            }
+            return true;
+        }
+
+        // 일반 message: 기존 zmq_msg_send 사용
         int result = message.send(getHandle(), flags);
         if (result == -1) {
             int errno = LibZmq.errno();

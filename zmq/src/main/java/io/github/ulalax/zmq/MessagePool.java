@@ -4,16 +4,10 @@ import io.github.ulalax.zmq.core.LibZmq;
 import io.github.ulalax.zmq.core.ZmqStructs;
 
 import java.lang.foreign.Arena;
-import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -139,41 +133,7 @@ public final class MessagePool {
     private final AtomicLong poolMisses = new AtomicLong();
     private final AtomicLong poolRejects = new AtomicLong();
 
-    // ========== Zero-Copy Callback Support ==========
-
-    /**
-     * Singleton callback stub for zmq_msg_init_data.
-     * Lazily initialized and lives in global arena.
-     */
-    private static MemorySegment poolCallbackStub = null;
-
-    /**
-     * Function descriptor for ZMQ free callback.
-     */
-    private static final FunctionDescriptor FREE_CALLBACK_DESC =
-        FunctionDescriptor.ofVoid(ValueLayout.ADDRESS, ValueLayout.ADDRESS);
-
-    /**
-     * Maps callback ID (stored in hint) to Message instance for pool return.
-     */
-    private static final ConcurrentHashMap<Long, Message> CALLBACK_MESSAGE_MAP =
-        new ConcurrentHashMap<>();
-
-    /**
-     * Atomic counter for generating unique callback IDs.
-     */
-    private static final AtomicLong CALLBACK_ID_GENERATOR = new AtomicLong(0);
-
-    /**
-     * Pool for hint pointers (8-byte MemorySegments storing callback IDs).
-     */
-    private static final ConcurrentLinkedQueue<MemorySegment> HINT_PTR_POOL =
-        new ConcurrentLinkedQueue<>();
-
-    /**
-     * Shared arena for allocating hint pointers.
-     */
-    private static final Arena HINT_ARENA = Arena.ofShared();
+    // ========== Pool Data Arena ==========
 
     /**
      * Shared arena for allocating all pooled message data buffers.
@@ -181,13 +141,6 @@ public final class MessagePool {
      * Individual buffers are not freed; instead, they are recycled through the pool.
      */
     private static final Arena POOL_DATA_ARENA = Arena.ofShared();
-
-    static {
-        // Pre-allocate 1000 hint pointers
-        for (int i = 0; i < 1000; i++) {
-            HINT_PTR_POOL.offer(HINT_ARENA.allocate(ValueLayout.JAVA_LONG));
-        }
-    }
 
     // ========== Constructor ==========
 
@@ -241,7 +194,7 @@ public final class MessagePool {
         if (msg != null) {
             poolHits.incrementAndGet();
             msg.prepareForReuse();
-            msg.setActualDataSize(size); // Initialize zmq_msg_t with zmq_msg_init_data
+            msg.actualDataSize = size;
             return msg;
         }
 
@@ -251,7 +204,7 @@ public final class MessagePool {
             pooledMessageCounts[bucketIndex].decrementAndGet();
             poolHits.incrementAndGet();
             msg.prepareForReuse();
-            msg.setActualDataSize(size); // Initialize zmq_msg_t with zmq_msg_init_data
+            msg.actualDataSize = size;
             return msg;
         }
 
@@ -278,8 +231,6 @@ public final class MessagePool {
         if (data.length > 0) {
             msg.getPoolDataPtr().copyFrom(MemorySegment.ofArray(data));
         }
-        // Initialize zmq_msg_t with actual data after copying
-        msg.setActualDataSize(data.length);
         return msg;
     }
 
@@ -442,7 +393,7 @@ public final class MessagePool {
     }
 
     /**
-     * Creates a new pooled message with zero-copy callback.
+     * Creates a new pooled message.
      *
      * @param bucketSize The bucket size (allocated buffer size)
      * @param bucketIndex The bucket index
@@ -450,10 +401,8 @@ public final class MessagePool {
      * @return A new {@link Message} configured for pooling
      */
     private Message createPooledMessage(int bucketSize, int bucketIndex, int actualSize) {
-        // Allocate native memory for message data from shared pool arena
         MemorySegment dataPtr = POOL_DATA_ARENA.allocate(bucketSize);
 
-        // Create Message with skipInit constructor
         Message msg = new Message(true);
         msg.isFromPool = true;
         msg.poolDataPtr = dataPtr;
@@ -461,150 +410,53 @@ public final class MessagePool {
         msg.bufferSize = bucketSize;
         msg.actualDataSize = actualSize;
 
-        // Generate unique callback ID
-        long callbackId = CALLBACK_ID_GENERATOR.incrementAndGet();
-
-        // Store message in callback map for pool return
-        CALLBACK_MESSAGE_MAP.put(callbackId, msg);
-
-        // Get or allocate hint pointer
-        MemorySegment hint = HINT_PTR_POOL.poll();
-        if (hint == null) {
-            hint = HINT_ARENA.allocate(ValueLayout.JAVA_LONG);
-        }
-        hint.set(ValueLayout.JAVA_LONG, 0, callbackId);
-
-        // Make hint final for lambda capture
-        final MemorySegment hintPtr = hint;
-
-        // Store hint and callback ID in message for reinitialization
-        msg.poolHintPtr = hintPtr;
-        msg.poolCallbackId = callbackId;
-
-        // Set reusable callback for pool return
-        msg.reusableCallback = () -> returnMessageToPool(msg, callbackId, hintPtr);
-
-        // Initialize zmq_msg_t with zmq_msg_init_data
-        MemorySegment callbackStub = getPoolCallbackStub();
-        int result = LibZmq.msgInitData(msg.msgSegment, dataPtr, actualSize, callbackStub, hintPtr);
-
+        // zmq_msg_init만 호출 (zmq_msg_init_data 제거)
+        int result = LibZmq.msgInit(msg.msgSegment);
         if (result != 0) {
-            // Cleanup on failure
-            CALLBACK_MESSAGE_MAP.remove(callbackId);
-            HINT_PTR_POOL.offer(hintPtr);
-            // Note: We do NOT close POOL_DATA_ARENA - it's shared and lives forever
-            // The allocated memory will remain but won't be used
-            throw new RuntimeException("Failed to initialize pooled message: zmq_msg_init_data returned " + result);
+            throw new RuntimeException("Failed to initialize message");
         }
-
-        // Mark as initialized (important for Message methods to work)
         msg.initialized = true;
-        msg.needsReinitialization = false; // Already initialized with zmq_msg_init_data
 
         return msg;
     }
 
     /**
-     * Returns a message to the pool (called by the reusable callback).
+     * Returns a message to the pool.
+     * Called by Socket after sending a pooled message.
      *
-     * <p>This method is invoked by ZMQ's free callback when it's done with the message data.
-     * The callback is responsible for returning the message to the pool for reuse.</p>
-     *
-     * <p><b>Important:</b> We do NOT call zmq_msg_init_data again here because:
-     * <ul>
-     *   <li>Zero-copy messages should only be initialized once with zmq_msg_init_data</li>
-     *   <li>After ZMQ sends the message, it calls our callback to free the data</li>
-     *   <li>We don't free the data - we return the message to the pool instead</li>
-     *   <li>When the message is rented again, it will be re-initialized with new data</li>
-     * </ul>
+     * @param msg The message to return to pool
+     */
+    public void returnMessage(Message msg) {
+        if (!msg.isFromPool) return;
+        returnMessageToPool(msg);
+    }
+
+    /**
+     * Returns a message to the pool (internal implementation).
      *
      * @param msg The message to return
-     * @param callbackId The callback ID for cleanup
-     * @param hintPtr The hint pointer to return to pool
      */
-    private void returnMessageToPool(Message msg, long callbackId, MemorySegment hintPtr) {
-        // Increment return counter
+    private void returnMessageToPool(Message msg) {
         totalReturns.incrementAndGet();
 
         int bucketIndex = msg.poolBucketIndex;
 
-        // Tier 1: Try to return to thread-local cache first
+        // Tier 1: thread-local cache
         ThreadLocalCache cache = threadLocalCache.get();
         if (cache.tryReturn(msg, bucketIndex)) {
             return;
         }
 
-        // Tier 2: Try to return to shared pool
+        // Tier 2: shared pool
         int currentCount = pooledMessageCounts[bucketIndex].get();
         if (currentCount < maxBuffersPerBucket[bucketIndex]) {
             sharedPool[bucketIndex].offer(msg);
             pooledMessageCounts[bucketIndex].incrementAndGet();
         } else {
-            // Tier 3: Pool is full - dispose the message
+            // Tier 3: dispose
             poolRejects.incrementAndGet();
-            // Clean up callback map entry
-            CALLBACK_MESSAGE_MAP.remove(callbackId);
-            HINT_PTR_POOL.offer(hintPtr);
-            // Note: We do NOT close POOL_DATA_ARENA or free the memory
-            // The memory remains allocated but unused (acceptable for a pool at capacity)
             msg.poolDataPtr = MemorySegment.NULL;
         }
-    }
-
-    /**
-     * Static callback invoked by ZMQ when message is released.
-     * Delegates to the message's reusable callback.
-     *
-     * @param data Pointer to message data (unused)
-     * @param hint Pointer containing callback ID
-     */
-    private static void staticPoolCallback(MemorySegment data, MemorySegment hint) {
-        if (hint.equals(MemorySegment.NULL)) {
-            return;
-        }
-
-        try {
-            // Read callback ID from hint
-            MemorySegment hintSegment = hint.reinterpret(ValueLayout.JAVA_LONG.byteSize());
-            long callbackId = hintSegment.get(ValueLayout.JAVA_LONG, 0);
-
-            // Retrieve message from callback map
-            Message msg = CALLBACK_MESSAGE_MAP.get(callbackId);
-
-            if (msg != null && msg.reusableCallback != null) {
-                // Invoke the reusable callback to return message to pool
-                msg.reusableCallback.run();
-            }
-        } catch (Exception e) {
-            // Swallow exceptions - must not corrupt ZMQ state
-            System.err.println("Error in MessagePool callback: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Lazily creates and returns the static pool callback stub.
-     * Thread-safe singleton pattern.
-     * Package-private for Message.prepareForReuse() access.
-     *
-     * @return MemorySegment pointing to native callback function
-     */
-    static synchronized MemorySegment getPoolCallbackStub() {
-        if (poolCallbackStub == null) {
-            try {
-                Linker linker = Linker.nativeLinker();
-                MethodHandle handle = MethodHandles.lookup()
-                    .findStatic(MessagePool.class, "staticPoolCallback",
-                        MethodType.methodType(void.class,
-                            MemorySegment.class, MemorySegment.class));
-
-                // Use global arena - callback stub lives forever
-                poolCallbackStub = linker.upcallStub(handle,
-                    FREE_CALLBACK_DESC, Arena.global());
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to create MessagePool callback stub", e);
-            }
-        }
-        return poolCallbackStub;
     }
 
     // ========== Inner Classes ==========

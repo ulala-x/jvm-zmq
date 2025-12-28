@@ -115,23 +115,6 @@ public final class Message implements AutoCloseable {
      */
     int actualDataSize = -1;
 
-    /**
-     * Reusable callback for returning message to pool.
-     * Package-private for MessagePool access.
-     */
-    Runnable reusableCallback = null;
-
-    /**
-     * Hint pointer for zmq_msg_init_data (stored for reinitialization).
-     * Package-private for MessagePool access.
-     */
-    MemorySegment poolHintPtr = MemorySegment.NULL;
-
-    /**
-     * Callback ID for this pooled message.
-     * Package-private for MessagePool access.
-     */
-    long poolCallbackId = -1;
 
     /**
      * Atomic field updater for callbackExecuted flag to ensure thread-safe callback execution.
@@ -145,16 +128,12 @@ public final class Message implements AutoCloseable {
     volatile int callbackExecuted = 0;
 
     /**
-     * Tracks whether the pooled message was successfully sent.
-     * Package-private for MessagePool access.
+     * Tracks whether this pooled message has already been returned to the pool.
+     * Prevents double-return when both Socket.send() and Message.close() are called.
+     * Package-private for Socket access.
      */
-    boolean wasSuccessfullySent = false;
+    volatile boolean returnedToPool = false;
 
-    /**
-     * Tracks whether the pooled message needs reinitialization with zmq_msg_init_data.
-     * Package-private for MessagePool access.
-     */
-    boolean needsReinitialization = false;
 
     /**
      * Memory pool for 8-byte hintPtr reuse.
@@ -643,19 +622,15 @@ public final class Message implements AutoCloseable {
     int send(MemorySegment socket, SendFlags flags) {
         ensureInitialized();
 
-        // Use zmq_msg_send for all messages (zero-copy for pooled messages)
-        // For pooled messages: user should call setActualDataSize() before send
-        // Callback will return to pool when ZMQ is done
-        int result = LibZmq.msgSend(msgSegment, socket, flags.getValue());
-        ZmqException.throwIfError(result);
-
-        // Mark pooled message as successfully sent
-        // ZMQ callback will handle pool return, not close()
+        // Pooled message는 Socket에서 zmq_send()로 직접 처리해야 함
         if (isFromPool) {
-            wasSuccessfullySent = true;
-            needsReinitialization = true; // After send, zmq_msg_t is reset to VSM
+            throw new IllegalStateException(
+                "Pooled messages must be sent via Socket.send(Message) which handles zmq_send directly");
         }
 
+        // 일반 message만 zmq_msg_send 사용
+        int result = LibZmq.msgSend(msgSegment, socket, flags.getValue());
+        ZmqException.throwIfError(result);
         return result;
     }
 
@@ -682,43 +657,6 @@ public final class Message implements AutoCloseable {
 
     // ========== MessagePool Support Methods ==========
 
-    /**
-     * Sets the actual data size for a pooled message and reinitializes zmq_msg_t.
-     *
-     * <p>After zmq_msg_send(), the zmq_msg_t is reset to empty VSM state and no longer
-     * references the data buffer. This method reinitializes it with zmq_msg_init_data
-     * to point to the pool buffer with the specified size.</p>
-     *
-     * <p>Before reinitializing, checks if the current zmq_msg_t size matches the requested size.
-     * If they match, skips reinitialization to avoid unnecessary overhead.</p>
-     *
-     * @param size the actual data size
-     * @throws IllegalArgumentException if size exceeds buffer size
-     * @throws RuntimeException if zmq_msg_init_data fails
-     */
-    public void setActualDataSize(int size) {
-        if (size > bufferSize) {
-            throw new IllegalArgumentException(
-                "size " + size + " exceeds buffer size " + bufferSize);
-        }
-        this.actualDataSize = size;
-
-        // Reinitialize zmq_msg_t with zmq_msg_init_data for the actual size
-        // Only initialize if message needs reinitialization (after send or first use)
-        if (isFromPool && needsReinitialization && poolDataPtr != null && !poolDataPtr.equals(MemorySegment.NULL)) {
-            // Check current zmq_msg_t size - skip reinitialization if size matches
-            int currentMsgSize = (int) LibZmq.msgSize(msgSegment);
-            if (currentMsgSize != size) {
-                MemorySegment callbackStub = MessagePool.getPoolCallbackStub();
-                int result = LibZmq.msgInitData(msgSegment, poolDataPtr, size, callbackStub, poolHintPtr);
-                if (result != 0) {
-                    throw new RuntimeException("Failed to reinitialize pooled message: zmq_msg_init_data returned " + result);
-                }
-            }
-            this.initialized = true;
-            this.needsReinitialization = false;
-        }
-    }
 
     /**
      * Gets the buffer size of this message.
@@ -746,24 +684,11 @@ public final class Message implements AutoCloseable {
      */
     void prepareForReuse() {
         this.actualDataSize = 0;
-        this.wasSuccessfullySent = false;
         this.callbackExecuted = 0;
         this.closed = false;
-        this.needsReinitialization = true; // Needs zmq_msg_init_data before next use
+        this.returnedToPool = false;
     }
 
-    /**
-     * Returns this message to the pool (dormant state).
-     * Invokes the reusable callback if set and not already executed.
-     * Package-private for MessagePool use.
-     */
-    void returnToPool() {
-        if (reusableCallback != null) {
-            if (CALLBACK_EXECUTED_UPDATER.compareAndSet(this, 0, 1)) {
-                reusableCallback.run();
-            }
-        }
-    }
 
     /**
      * Disposes of a pooled message when it exceeds maxBuffer limit.
@@ -795,7 +720,7 @@ public final class Message implements AutoCloseable {
                 "size " + size + " exceeds buffer size " + bufferSize);
         }
         MemorySegment.copy(source, 0, poolDataPtr, 0, size);
-        setActualDataSize(size); // Use setActualDataSize to initialize zmq_msg_t
+        this.actualDataSize = size;
     }
 
     @Override
@@ -803,12 +728,11 @@ public final class Message implements AutoCloseable {
         if (!closed) {
             closed = true;
 
-            // Pool message: handle based on whether it was sent
+            // Pool message: return to pool on close (중복 방지)
             if (isFromPool) {
-                // If message was successfully sent, ZMQ callback will return to pool
-                // If message was NOT sent (e.g., rent then discard), return to pool now
-                if (!wasSuccessfullySent) {
-                    returnToPool();
+                if (!returnedToPool) {
+                    returnedToPool = true;
+                    MessagePool.SHARED.returnMessage(this);
                 }
                 return;
             }
