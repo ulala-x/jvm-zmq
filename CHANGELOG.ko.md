@@ -10,6 +10,20 @@
 
 ## [Unreleased]
 
+## [0.5] - 2025-12-30
+
+### 삭제됨
+- **MessagePool**: 커스텀 메시지 풀링 시스템 제거
+  - 직렬화 라이브러리(Protobuf 등)가 MemorySegment를 지원하지 않음
+  - 데이터가 여전히 byte[]를 거쳐야 하므로 zero-copy 이점이 상쇄됨
+  - PooledByteBufAllocator (Netty)가 더 간단한 API로 더 나은 성능 제공
+- `MessagePool.java`, `MessageSize.java` 및 관련 테스트
+- `Message.java`와 `Socket.java`에서 풀 관련 필드/메서드
+
+### 변경됨
+- Message API 단순화 (풀 관련 생성자 및 메서드 제거)
+- 벤치마크를 5개 전략으로 업데이트 (PooledMessage_SendRecv 제거)
+
 ## [0.2] - 2025-12-22
 
 ### 변경됨
@@ -40,6 +54,7 @@
 - 모든 ZeroMQ 패턴을 시연하는 13개의 샘플 애플리케이션
 - Javadoc API 문서
 
-[Unreleased]: https://github.com/ulala-x/jvm-zmq/compare/v0.2...HEAD
+[Unreleased]: https://github.com/ulala-x/jvm-zmq/compare/v0.5...HEAD
+[0.5]: https://github.com/ulala-x/jvm-zmq/compare/v0.2...v0.5
 [0.2]: https://github.com/ulala-x/jvm-zmq/compare/v0.1...v0.2
 [0.1]: https://github.com/ulala-x/jvm-zmq/releases/tag/v0.1

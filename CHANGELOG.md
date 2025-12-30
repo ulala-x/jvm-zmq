@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5] - 2025-12-30
+
+### Removed
+- **MessagePool**: Removed custom message pooling system
+  - Serialization libraries (Protobuf, etc.) don't support MemorySegment
+  - Data must still go through byte[] first, negating zero-copy benefits
+  - PooledByteBufAllocator (Netty) provides better performance with simpler API
+- `MessagePool.java`, `MessageSize.java` and related tests
+- Pool-related fields/methods from `Message.java` and `Socket.java`
+
+### Changed
+- Simplified Message API (removed pool-specific constructors and methods)
+- Updated benchmarks to 5 strategies (removed PooledMessage_SendRecv)
+
 ## [0.2] - 2025-12-22
 
 ### Changed
@@ -40,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 13 sample applications demonstrating all ZeroMQ patterns
 - Javadoc API documentation
 
-[Unreleased]: https://github.com/ulala-x/jvm-zmq/compare/v0.2...HEAD
+[Unreleased]: https://github.com/ulala-x/jvm-zmq/compare/v0.5...HEAD
+[0.5]: https://github.com/ulala-x/jvm-zmq/compare/v0.2...v0.5
 [0.2]: https://github.com/ulala-x/jvm-zmq/compare/v0.1...v0.2
 [0.1]: https://github.com/ulala-x/jvm-zmq/releases/tag/v0.1
