@@ -18,18 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enables efficient memory pooling with `PooledByteBufAllocator`
 - Netty dependency (`io.netty:netty-buffer`) now included as API dependency
 
-### Removed
-- **MessagePool**: Removed custom message pooling system
-  - Serialization libraries (Protobuf, etc.) don't support MemorySegment
-  - Data must still go through byte[] first, negating zero-copy benefits
-  - PooledByteBufAllocator (Netty) provides better performance with simpler API
-- `MessagePool.java`, `MessageSize.java` and related tests
-- Pool-related fields/methods from `Message.java` and `Socket.java`
-
-### Changed
-- Simplified Message API (removed pool-specific constructors and methods)
-- Updated benchmarks to 5 strategies (removed PooledMessage_SendRecv)
-
 ## [0.2] - 2025-12-22
 
 ### Changed
