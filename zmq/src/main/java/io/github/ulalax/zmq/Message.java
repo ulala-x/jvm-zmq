@@ -37,7 +37,7 @@ public final class Message implements AutoCloseable {
     final MemorySegment msgSegment;  // Package-private for direct access from Socket
     private final Cleaner.Cleanable cleanable;
     private volatile boolean closed = false;
-    volatile boolean initialized = false;  // Package-private for MessagePool access
+    volatile boolean initialized = false;
 
     // === Zero-Copy Callback Support ===
 
@@ -82,57 +82,6 @@ public final class Message implements AutoCloseable {
      * Callback ID for cleanup (if using zero-copy constructor).
      */
     private Long callbackId;
-
-    // === MessagePool Support Fields ===
-
-    /**
-     * Indicates whether this message is managed by MessagePool.
-     * Package-private for MessagePool access.
-     */
-    boolean isFromPool = false;
-
-    /**
-     * Pointer to the native data buffer allocated by the pool.
-     * Package-private for MessagePool access.
-     */
-    MemorySegment poolDataPtr = MemorySegment.NULL;
-
-    /**
-     * Index of the bucket this message belongs to in MessagePool.
-     * Package-private for MessagePool access.
-     */
-    int poolBucketIndex = -1;
-
-    /**
-     * Buffer size allocated for this pooled message (bucket size).
-     * Package-private for MessagePool access.
-     */
-    int bufferSize = -1;
-
-    /**
-     * Actual data size stored in the buffer (may be less than bufferSize).
-     * Package-private for MessagePool access.
-     */
-    int actualDataSize = -1;
-
-
-    /**
-     * Atomic field updater for callbackExecuted flag to ensure thread-safe callback execution.
-     */
-    private static final AtomicIntegerFieldUpdater<Message> CALLBACK_EXECUTED_UPDATER =
-        AtomicIntegerFieldUpdater.newUpdater(Message.class, "callbackExecuted");
-
-    /**
-     * Flag to track if callback has been executed (0 = not executed, 1 = executed).
-     */
-    volatile int callbackExecuted = 0;
-
-    /**
-     * Tracks whether this pooled message has already been returned to the pool.
-     * Prevents double-return when both Socket.send() and Message.close() are called.
-     * Package-private for Socket access.
-     */
-    volatile boolean returnedToPool = false;
 
 
     /**
@@ -277,22 +226,6 @@ public final class Message implements AutoCloseable {
      */
     public Message(String text) {
         this(text.getBytes(StandardCharsets.UTF_8));
-    }
-
-    /**
-     * Package-private constructor for MessagePool.
-     * Creates a message without zmq_msg_init - pool will initialize via zmq_msg_init_data.
-     *
-     * @param skipInit unused, just differentiates from other constructors
-     */
-    Message(boolean skipInit) {
-        // Use shared arena for pooled messages - allows callback from ZMQ's internal thread
-        // to re-initialize msgSegment when message is returned to pool
-        this.arena = Arena.ofShared();
-        this.msgSegment = arena.allocate(ZmqStructs.ZMQ_MSG_LAYOUT);
-        // Do NOT call zmq_msg_init - pool will use zmq_msg_init_data
-        this.initialized = false; // Will be set to true after zmq_msg_init_data
-        this.cleanable = null; // Pool manages lifecycle
     }
 
     /**
@@ -477,10 +410,6 @@ public final class Message implements AutoCloseable {
      */
     public MemorySegment data() {
         ensureInitialized();
-        if (isFromPool) {
-            // Pool message: return poolDataPtr sliced to actualDataSize
-            return poolDataPtr.asSlice(0, actualDataSize);
-        }
         MemorySegment dataPtr = LibZmq.msgData(msgSegment);
         long size = LibZmq.msgSize(msgSegment);
         return dataPtr.reinterpret(size, arena, null);
@@ -492,9 +421,6 @@ public final class Message implements AutoCloseable {
      */
     public int size() {
         ensureInitialized();
-        if (isFromPool) {
-            return actualDataSize;
-        }
         return (int) LibZmq.msgSize(msgSegment);
     }
 
@@ -621,14 +547,6 @@ public final class Message implements AutoCloseable {
      */
     int send(MemorySegment socket, SendFlags flags) {
         ensureInitialized();
-
-        // Pooled message는 Socket에서 zmq_send()로 직접 처리해야 함
-        if (isFromPool) {
-            throw new IllegalStateException(
-                "Pooled messages must be sent via Socket.send(Message) which handles zmq_send directly");
-        }
-
-        // 일반 message만 zmq_msg_send 사용
         int result = LibZmq.msgSend(msgSegment, socket, flags.getValue());
         ZmqException.throwIfError(result);
         return result;
@@ -655,87 +573,10 @@ public final class Message implements AutoCloseable {
         }
     }
 
-    // ========== MessagePool Support Methods ==========
-
-
-    /**
-     * Gets the buffer size of this message.
-     * For pooled messages, this is the allocated bucket size.
-     *
-     * @return the buffer size, or -1 if not a pooled message
-     */
-    public int getBufferSize() {
-        return bufferSize;
-    }
-
-    /**
-     * Gets the pool data pointer for direct access.
-     * Package-private for MessagePool use.
-     *
-     * @return the pool data pointer
-     */
-    MemorySegment getPoolDataPtr() {
-        return poolDataPtr;
-    }
-
-    /**
-     * Prepares this message for reuse in the pool.
-     * Package-private for MessagePool use.
-     */
-    void prepareForReuse() {
-        this.actualDataSize = 0;
-        this.callbackExecuted = 0;
-        this.closed = false;
-        this.returnedToPool = false;
-    }
-
-
-    /**
-     * Disposes of a pooled message when it exceeds maxBuffer limit.
-     * Frees native memory and closes the arena.
-     * Package-private for MessagePool use.
-     */
-    void disposePooledMessage() {
-        if (poolDataPtr != null && !poolDataPtr.equals(MemorySegment.NULL)) {
-            // Free native memory - assuming we have a way to free it
-            // If using Arena allocation, the Arena.close() will handle it
-            poolDataPtr = MemorySegment.NULL;
-        }
-        if (arena != null) {
-            arena.close();
-        }
-    }
-
-    /**
-     * Copies data from a native memory segment into this pooled message's buffer.
-     * Package-private for MessagePool use.
-     *
-     * @param source the source memory segment
-     * @param size the size to copy
-     * @throws IllegalArgumentException if size exceeds buffer size
-     */
-    void copyFromNative(MemorySegment source, int size) {
-        if (size > bufferSize) {
-            throw new IllegalArgumentException(
-                "size " + size + " exceeds buffer size " + bufferSize);
-        }
-        MemorySegment.copy(source, 0, poolDataPtr, 0, size);
-        this.actualDataSize = size;
-    }
-
     @Override
     public void close() {
         if (!closed) {
             closed = true;
-
-            // Pool message: return to pool on close (중복 방지)
-            if (isFromPool) {
-                if (!returnedToPool) {
-                    returnedToPool = true;
-                    MessagePool.SHARED.returnMessage(this);
-                }
-                return;
-            }
 
             // IMPORTANT: Do NOT remove callback from CALLBACK_MAP here!
             // ZMQ may not have called the free callback yet. The callback will be

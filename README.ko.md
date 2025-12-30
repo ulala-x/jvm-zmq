@@ -213,52 +213,6 @@ try (Context ctx = new Context();
 }
 ```
 
-### MessagePool - Zero-Copy 메시지 풀링
-
-고성능 애플리케이션을 위해 `MessagePool`을 사용하여 할당 오버헤드를 제거하고 GC 압력을 줄이세요:
-
-```java
-import io.github.ulalax.zmq.*;
-
-// 시작 시 풀 예열
-MessagePool.SHARED.prewarm(MessageSize.SIZE_1K, 100);
-MessagePool.SHARED.prewarm(MessageSize.SIZE_4K, 50);
-
-// 풀에서 메시지 대여
-Message msg = MessagePool.SHARED.rent(1024);
-msg.getPoolDataPtr().copyFrom(MemorySegment.ofArray(myData));
-
-// 송신 (ZMQ가 해제한 후 자동으로 풀로 반환)
-socket.send(msg, SendFlags.NONE);
-msg.close(); // 안전하게 close - 풀이 생명주기 관리
-
-// 또는 한 번에 데이터와 함께 대여
-Message msg2 = MessagePool.SHARED.rent("Hello".getBytes());
-socket.send(msg2, SendFlags.NONE);
-msg2.close();
-
-// 풀 성능 모니터링
-PoolStatistics stats = MessagePool.SHARED.getStatistics();
-System.out.println("Hit rate: " + stats.getHitRate() * 100 + "%");
-```
-
-**기능:**
-- **2단계 캐싱**: ThreadLocal 캐시 (버킷당 8개) + 공유 풀
-- **19개 크기 버킷**: 16B ~ 4MB (2의 거듭제곱)
-- **Zero-copy**: `zmq_msg_init_data`를 사용한 직접 메모리 전달
-- **자동 반환**: ZMQ 콜백을 통한 자동 풀 반환
-- **Thread-safe**: ThreadLocal은 lock-free, 공유 풀은 ConcurrentLinkedQueue 사용
-
-**설정:**
-```java
-// 버킷당 최대 버퍼 수 설정
-MessagePool.SHARED.setMaxBuffers(MessageSize.SIZE_1M, 10);
-
-// 통계 조회
-PoolStatistics stats = MessagePool.SHARED.getStatistics();
-System.out.println(stats); // rents, returns, hits, misses, hit rate
-```
-
 ## 성능
 
 JMH 벤치마크 결과 (Router-to-Router 패턴, 반복당 10,000개 메시지):

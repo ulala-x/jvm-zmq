@@ -17,13 +17,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 
 /**
- * Compares six message buffer strategies for ZMQ message sending:
+ * Compares five message buffer strategies for ZMQ message sending:
  * 1. ByteArray_SendRecv: new byte[] + send(byte[]) / new byte[] + recv(byte[])
  * 2. ArrayPool_SendRecv_Heap: heapBuffer() + send(ByteBuf) / heapBuffer() + recv(ByteBuf)
  * 3. ArrayPool_SendRecv_Direct: directBuffer() + send(ByteBuf) / directBuffer() + recv(ByteBuf)
  * 4. Message_SendRecv: new Message(size) + send(Message) / new Message() + recv(Message)
  * 5. MessageZeroCopy_SendRecv: Arena.ofShared() + new Message(seg, size, callback) / new Message() + recv(Message)
- * 6. PooledMessage_SendRecv: MessagePool.rent() + send(Message) / MessagePool.rent() + recv(msg, size)
  *
  * This benchmark measures pure memory allocation/deallocation without data copying,
  * matching the .NET benchmark structure.
@@ -97,11 +96,6 @@ public class MessageBufferStrategyBenchmark {
             // Pre-warm for all message sizes to eliminate lazy initialization overhead
             int[] allMessageSizes = {64, 512, 1024, 65536, 131072, 262144};
             warmupByteBufAllocator(allMessageSizes);
-
-            // === MessagePool Pre-warming ===
-            // Pre-warm MessagePool for the current message size
-            MessageSize msgSize = MessageSize.of(messageSize);
-            MessagePool.SHARED.prewarm(msgSize, 500);
         }
 
         @TearDown(Level.Trial)
@@ -115,9 +109,6 @@ public class MessageBufferStrategyBenchmark {
                 router2.close();
             }
             if (ctx != null) ctx.close();
-
-            // Clear MessagePool
-            MessagePool.SHARED.clear();
         }
 
         /**
@@ -406,49 +397,6 @@ public class MessageBufferStrategyBenchmark {
             throw new RuntimeException("Benchmark failed", e);
         }
     }
-
-    @Benchmark
-    public void PooledMessage_SendRecv(RouterState state) {
-        state.receiverLatch = new CountDownLatch(state.messageCount);
-        state.receiverError = false;
-
-        Thread receiver = new Thread(() -> {
-            try {
-                for (int n = 0; n < state.messageCount; n++) {
-                    // Receive identity
-                    state.router2.recv(state.identityBuffer, RecvFlags.NONE);
-
-                    // Receive payload using pooled Message
-                    Message msg = MessagePool.SHARED.rent(state.messageSize);
-                    state.router2.recv(msg, state.messageSize);
-                    msg.close(); // Automatically returns to pool
-
-                    state.receiverLatch.countDown();
-                }
-            } catch (Exception e) {
-                state.receiverError = true;
-                state.receiverException = e;
-            }
-        });
-        receiver.start();
-
-        try {
-            for (int i = 0; i < state.messageCount; i++) {
-                // Send identity
-                state.router1.send(state.router2Id, SendFlags.SEND_MORE);
-
-                // Rent message from pool for sending (rent() calls setActualDataSize internally)
-                Message msg = MessagePool.SHARED.rent(state.messageSize);
-                state.router1.send(msg, SendFlags.DONT_WAIT);
-                msg.close(); // Automatically returns to pool
-            }
-
-            awaitCompletion(receiver, state);
-        } catch (Exception e) {
-            throw new RuntimeException("Benchmark failed", e);
-        }
-    }
-
 
     private void awaitCompletion(Thread receiver, RouterState state) {
         try {

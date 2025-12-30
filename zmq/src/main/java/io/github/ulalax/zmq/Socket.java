@@ -462,32 +462,6 @@ public final class Socket implements AutoCloseable {
      * @throws ZmqException if a real ZMQ error occurs (not EAGAIN)
      */
     public boolean send(Message message, SendFlags flags) {
-        // Pooled message: zmq_send() 직접 사용 (FFM 1회만 호출)
-        if (message.isFromPool) {
-            int result = LibZmq.send(
-                getHandle(),
-                message.getPoolDataPtr(),
-                message.actualDataSize,
-                flags.getValue()
-            );
-
-            if (result == -1) {
-                int errno = LibZmq.errno();
-                if (errno == ZmqConstants.EAGAIN) {
-                    return false;
-                }
-                throw new ZmqException(errno);
-            }
-
-            // 전송 성공 후 풀로 반환 (중복 방지)
-            if (!message.returnedToPool) {
-                message.returnedToPool = true;
-                MessagePool.SHARED.returnMessage(message);
-            }
-            return true;
-        }
-
-        // 일반 message: 기존 zmq_msg_send 사용
         int result = message.send(getHandle(), flags);
         if (result == -1) {
             int errno = LibZmq.errno();
@@ -639,76 +613,6 @@ public final class Socket implements AutoCloseable {
             throw new ZmqException(errno);  // Real error
         }
         return result;
-    }
-
-    /**
-     * Receives data into a pooled message with expected size validation.
-     *
-     * <p>This method is optimized for use with {@link MessagePool} when the expected
-     * message size is known in advance. It receives data directly into the message's
-     * native buffer without intermediate copies.</p>
-     *
-     * @param message A message obtained from {@link MessagePool#rent(int)}
-     * @param expectedSize The expected size of incoming data
-     * @param flags Receive flags
-     * @return Number of bytes received, or {@link #NO_MESSAGE} if non-blocking and no message available
-     * @throws ZmqException if buffer size is too small (EBUFFERSMALL)
-     * @throws ZmqException if received size doesn't match expected (ESIZEMISMATCH)
-     * @throws ZmqException on other ZMQ errors
-     * @throws IllegalStateException if socket is closed
-     *
-     * @see MessagePool#rent(int)
-     */
-    public int recv(Message message, int expectedSize, RecvFlags flags) {
-        // 1. 버퍼 크기 검증
-        if (message.getBufferSize() < expectedSize) {
-            throw new ZmqException(ZmqConstants.EBUFFERSMALL,
-                "Buffer size " + message.getBufferSize() + " is smaller than expected " + expectedSize);
-        }
-
-        // 2. 네이티브 포인터로 직접 수신 (zmq_recv)
-        int actualSize = LibZmq.recv(getHandle(), message.getPoolDataPtr(),
-                                      message.getBufferSize(), flags.getValue());
-
-        // 3. 에러 처리
-        if (actualSize == -1) {
-            int errno = LibZmq.errno();
-            if (errno == ZmqConstants.EAGAIN) {
-                return NO_MESSAGE;
-            }
-            throw new ZmqException(errno);
-        }
-
-        // 4. 크기 검증
-        if (actualSize != expectedSize) {
-            throw new ZmqException(ZmqConstants.ESIZEMISMATCH,
-                "Received size " + actualSize + " does not match expected " + expectedSize);
-        }
-
-        // 5. actualDataSize 설정 (zmq_msg_init_data 호출 없이 필드만 설정)
-        message.actualDataSize = actualSize;
-
-        return actualSize;
-    }
-
-    /**
-     * Receives data into a pooled message with expected size validation (blocking).
-     *
-     * <p>This is a convenience method that calls {@link #recv(Message, int, RecvFlags)}
-     * with {@link RecvFlags#NONE}.</p>
-     *
-     * @param message A message obtained from {@link MessagePool#rent(int)}
-     * @param expectedSize The expected size of incoming data
-     * @return Number of bytes received
-     * @throws ZmqException if buffer size is too small (EBUFFERSMALL)
-     * @throws ZmqException if received size doesn't match expected (ESIZEMISMATCH)
-     * @throws ZmqException on other ZMQ errors
-     * @throws IllegalStateException if socket is closed
-     *
-     * @see MessagePool#rent(int)
-     */
-    public int recv(Message message, int expectedSize) {
-        return recv(message, expectedSize, RecvFlags.NONE);
     }
 
     /**

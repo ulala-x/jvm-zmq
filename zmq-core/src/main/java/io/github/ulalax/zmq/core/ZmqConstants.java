@@ -395,14 +395,6 @@ public final class ZmqConstants {
     /** Too many open files. */
     public static final int EMFILE = 24;
 
-    // ========== MessagePool Error Codes ==========
-
-    /** Buffer size is too small. */
-    public static final int EBUFFERSMALL = 1001;
-
-    /** Size mismatch error. */
-    public static final int ESIZEMISMATCH = 1002;
-
     // ========== Socket Monitor Events ==========
 
     /** Connection established event. */

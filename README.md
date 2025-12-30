@@ -213,52 +213,6 @@ try (Context ctx = new Context();
 }
 ```
 
-### MessagePool - Zero-Copy Message Pooling
-
-For high-performance applications, use `MessagePool` to eliminate allocation overhead and reduce GC pressure:
-
-```java
-import io.github.ulalax.zmq.*;
-
-// Pre-warm pool at startup
-MessagePool.SHARED.prewarm(MessageSize.SIZE_1K, 100);
-MessagePool.SHARED.prewarm(MessageSize.SIZE_4K, 50);
-
-// Rent message from pool
-Message msg = MessagePool.SHARED.rent(1024);
-msg.getPoolDataPtr().copyFrom(MemorySegment.ofArray(myData));
-
-// Send (automatically returns to pool after ZMQ releases it)
-socket.send(msg, SendFlags.NONE);
-msg.close(); // Safe to close - pool handles lifecycle
-
-// Or rent with data in one step
-Message msg2 = MessagePool.SHARED.rent("Hello".getBytes());
-socket.send(msg2, SendFlags.NONE);
-msg2.close();
-
-// Monitor pool performance
-PoolStatistics stats = MessagePool.SHARED.getStatistics();
-System.out.println("Hit rate: " + stats.getHitRate() * 100 + "%");
-```
-
-**Features:**
-- **Two-tier caching**: ThreadLocal cache (8 msgs/bucket) + shared pool
-- **19 size buckets**: 16B to 4MB (power-of-2)
-- **Zero-copy**: Uses `zmq_msg_init_data` for direct memory passing
-- **Automatic return**: Messages return to pool via ZMQ callback
-- **Thread-safe**: Lock-free for ThreadLocal, ConcurrentLinkedQueue for shared pool
-
-**Configuration:**
-```java
-// Set max buffers per bucket
-MessagePool.SHARED.setMaxBuffers(MessageSize.SIZE_1M, 10);
-
-// Get statistics
-PoolStatistics stats = MessagePool.SHARED.getStatistics();
-System.out.println(stats); // rents, returns, hits, misses, hit rate
-```
-
 ## Performance
 
 Based on JMH benchmarks (Router-to-Router pattern, 10,000 messages per iteration):

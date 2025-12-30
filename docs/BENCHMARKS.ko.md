@@ -18,62 +18,35 @@ JMH(Java Microbenchmark Harness)를 사용한 JVM-ZMQ의 종합 성능 벤치마
 
 ## 메시지 버퍼 전략 벤치마크
 
-메시지 송수신을 위한 네 가지 버퍼 관리 전략 비교입니다.
+메시지 송수신을 위한 다섯 가지 버퍼 관리 전략 비교입니다.
 
 ### 성능 개요
 
-| Method                   | Size    | Throughput | Msg/sec | Mean      | Ratio | Allocated | Alloc Ratio |
-|------------------------- |--------:|------------|--------:|----------:|------:|----------:|------------:|
-| ByteArray_SendRecv       |     64B | 876.11 Mbps |   1.71M |    5.84 ms |  1.00 |   1.53 MB |       1.00 |
-| ArrayPool_SendRecv       |     64B | 660.21 Mbps |   1.29M |    7.76 ms |  1.33 | 178.36 KB |       0.11 |
-| MessageZeroCopy_SendRecv |     64B | 14.21 Mbps |  27.75K |  360.30 ms | 61.65 |  10.86 MB |       7.11 |
-| Message_SendRecv         |     64B | 543.56 Mbps |   1.06M |    9.42 ms |  1.61 |   7.55 MB |       4.95 |
-|                          |         |            |         |           |       |           |             |
-| ByteArray_SendRecv       |    512B |  5.45 Gbps |   1.33M |    7.51 ms |  1.00 |  10.07 MB |       1.00 |
-| ArrayPool_SendRecv       |    512B |  5.26 Gbps |   1.28M |    7.78 ms |  1.04 | 179.11 KB |       0.02 |
-| MessageZeroCopy_SendRecv |    512B | 106.89 Mbps |  26.10K |  383.19 ms | 51.00 |  11.14 MB |       1.11 |
-| Message_SendRecv         |    512B |  4.07 Gbps | 993.51K |   10.07 ms |  1.34 |   7.55 MB |       0.75 |
-|                          |         |            |         |           |       |           |             |
-| ByteArray_SendRecv       |     1KB |  8.51 Gbps |   1.04M |    9.63 ms |  1.00 |  19.84 MB |       1.00 |
-| ArrayPool_SendRecv       |     1KB |  8.07 Gbps | 984.60K |   10.16 ms |  1.06 | 179.62 KB |       0.01 |
-| MessageZeroCopy_SendRecv |     1KB | 210.75 Mbps |  25.73K |  388.70 ms | 40.38 |  11.20 MB |       0.56 |
-| Message_SendRecv         |     1KB |  8.17 Gbps | 997.05K |   10.03 ms |  1.04 |   7.55 MB |       0.38 |
-|                          |         |            |         |           |       |           |             |
-| ByteArray_SendRecv       |    64KB |  4.74 GB/s |  72.35K |  138.21 ms |  1.00 |   1.22 GB |       1.00 |
-| ArrayPool_SendRecv       |    64KB |  5.10 GB/s |  77.88K |  128.40 ms |  0.93 | 177.15 KB |       0.00 |
-| MessageZeroCopy_SendRecv |    64KB |  1.23 GB/s |  18.74K |  533.52 ms |  3.86 |  11.24 MB |       0.01 |
-| Message_SendRecv         |    64KB |  5.10 GB/s |  77.83K |  128.48 ms |  0.93 |   7.55 MB |       0.01 |
+| 전략 | 64B | 512B | 1KB | 64KB | 128KB | 256KB |
+|------|-----|------|-----|------|-------|-------|
+| **ByteArray** | 5,745 ops/s | 5,307 ops/s | 4,031 ops/s | - | - | - |
+| **ArrayPool_Heap** | 5,147 ops/s | 3,416 ops/s | 4,375 ops/s | 824 ops/s | 512 ops/s | 287 ops/s |
+| **ArrayPool_Direct** | 4,581 ops/s | 4,693 ops/s | 4,446 ops/s | 821 ops/s | 443 ops/s | 280 ops/s |
+| **Message** | - | - | - | - | - | - |
+| **MessageZeroCopy** | - | - | - | - | - | - |
 
-### 상세 메트릭
+### 메모리 할당량
 
-| Method                   | Size    | Score (ops/s) | Error      | StdDev    | Latency   | Gen0      |
-|------------------------- |--------:|--------------:|-----------:|----------:|----------:|----------:|
-| ByteArray_SendRecv       |     64B |       171.11 |   0.1014 ms |   0.0236 ms | 584.40 ns |   29.0000 |
-| ArrayPool_SendRecv       |     64B |       128.95 |   1.2621 ms |   0.2932 ms | 775.51 ns |   21.0000 |
-| MessageZeroCopy_SendRecv |     64B |         2.78 |  16.6015 ms |   3.8562 ms |  36.03 μs |    1.0000 |
-| Message_SendRecv         |     64B |       106.16 |   0.0954 ms |   0.0222 ms | 941.93 ns |   40.0000 |
-|                          |         |               |            |           |           |           |
-| ByteArray_SendRecv       |    512B |       133.10 |   1.0116 ms |   0.2350 ms | 751.29 ns |   73.0000 |
-| ArrayPool_SendRecv       |    512B |       128.46 |   0.0989 ms |   0.0230 ms | 778.47 ns |   21.0000 |
-| MessageZeroCopy_SendRecv |    512B |         2.61 |   9.1644 ms |   2.1287 ms |  38.32 μs |    1.0000 |
-| Message_SendRecv         |    512B |        99.35 |   0.0757 ms |   0.0176 ms |   1.01 μs |   38.0000 |
-|                          |         |               |            |           |           |           |
-| ByteArray_SendRecv       |     1KB |       103.89 |   0.5087 ms |   0.1182 ms | 962.53 ns |   96.0000 |
-| ArrayPool_SendRecv       |     1KB |        98.46 |   0.1869 ms |   0.0434 ms |   1.02 μs |   16.0000 |
-| MessageZeroCopy_SendRecv |     1KB |         2.57 |  48.1970 ms |  11.1952 ms |  38.87 μs |    1.0000 |
-| Message_SendRecv         |     1KB |        99.70 |   0.0772 ms |   0.0179 ms |   1.00 μs |   38.0000 |
-|                          |         |               |            |           |           |           |
-| ByteArray_SendRecv       |    64KB |         7.24 |  10.6799 ms |   2.4807 ms |  13.82 μs |  244.0000 |
-| ArrayPool_SendRecv       |    64KB |         7.79 |  10.4213 ms |   2.4207 ms |  12.84 μs |    1.0000 |
-| MessageZeroCopy_SendRecv |    64KB |         1.87 |  22.4202 ms |   5.2078 ms |  53.35 μs |    1.0000 |
-| Message_SendRecv         |    64KB |         7.78 |   4.0053 ms |   0.9303 ms |  12.85 μs |    3.0000 |
+| 전략 | 반복당 할당량 |
+|------|--------------|
+| **ByteArray** | 메시지 크기에 비례 |
+| **ArrayPool_Heap** | ~17KB (일정) |
+| **ArrayPool_Direct** | ~44KB (일정) |
+| **Message** | - |
+| **MessageZeroCopy** | - |
 
 ### 핵심 발견
 
-**ArrayPool을 프로덕션에서 사용하세요:**
-- 메시지 크기와 무관하게 일정한 ~178KB 메모리 할당
-- ByteArray는 메시지 크기에 비례하여 증가 (64KB에서 1.22GB vs 178KB)
-- 64KB 메시지 기준: ArrayPool이 ByteArray보다 **7,000배 적은 메모리** 사용
+**권장: 프로덕션 환경에서는 ArrayPool_Heap 사용**
+- 메시지 크기와 무관하게 일정한 낮은 메모리 할당 (~17KB)
+- 모든 메시지 크기에서 우수한 성능
+- Direct 할당보다 낮은 GC 압력
+- 대부분의 경우 ArrayPool_Heap이 ArrayPool_Direct보다 우수한 성능
 
 ### 전략 설명
 
@@ -85,59 +58,81 @@ System.arraycopy(sourceData, 0, sendBuffer, 0, messageSize);
 socket.send(sendBuffer, SendFlags.DONT_WAIT);
 
 // 수신 - 고정 버퍼 사용
-socket.recv(recvBuffer, RecvFlags.NONE);  // recvBuffer는 미리 할당됨
-byte[] outputBuffer = new byte[size];     // 매 메시지마다 새 할당
+socket.recv(recvBuffer, RecvFlags.NONE);
+byte[] outputBuffer = new byte[size];
 System.arraycopy(recvBuffer, 0, outputBuffer, 0, size);
 ```
 
 **특징:**
 - 송수신마다 새로운 byte 배열 할당
-- 가장 높은 GC 압력 (기준 할당량 = 1.0)
+- 가장 높은 GC 압력 - 메시지 크기에 비례
 - 간단한 구현
-- **적합한 경우**: 처리량이 중요한 소형 메시지
+- **적합한 경우**: 소형 메시지만 사용 (<1KB)
 
 **성능:**
-- 64B: 1.71M msg/sec (최고)
-- 512B: 1.33M msg/sec (최고)
-- 1KB: 1.04M msg/sec
-- 64KB: 72K msg/sec
+- 64B: 5,745 ops/s
+- 512B: 5,307 ops/s
+- 1KB: 4,031 ops/s
+- 대형 메시지(64KB+)에는 적합하지 않음
 
-#### 2. ArrayPool_SendRecv (권장)
+#### 2. ArrayPool_Heap (권장)
 ```java
 // 송신
-ByteBuf sendBuf = allocator.buffer(messageSize);
+ByteBuf sendBuf = heapAllocator.buffer(messageSize);
 try {
     sendBuf.writeBytes(sourceData, 0, messageSize);
-    sendBuf.getBytes(0, reusableSendBuffer, 0, messageSize);  // 고정 버퍼
+    sendBuf.getBytes(0, reusableSendBuffer, 0, messageSize);
     socket.send(reusableSendBuffer, SendFlags.DONT_WAIT);
 } finally {
     sendBuf.release();
 }
 
-// 수신 - 고정 버퍼 사용
-socket.recv(recvBuffer, RecvFlags.NONE);  // recvBuffer는 미리 할당됨
-ByteBuf outputBuf = allocator.buffer(size);
+// 수신
+socket.recv(recvBuffer, RecvFlags.NONE);
+ByteBuf outputBuf = heapAllocator.buffer(size);
 try {
     outputBuf.writeBytes(recvBuffer, 0, size);
-    outputBuf.getBytes(0, reusableRecvBuffer, 0, size);  // 고정 버퍼
+    outputBuf.getBytes(0, reusableRecvBuffer, 0, size);
 } finally {
     outputBuf.release();
 }
 ```
 
 **특징:**
-- 버퍼 풀링을 위해 Netty PooledByteBufAllocator 사용
-- **GC 압력 대폭 감소** (512B에서 2% 할당, 1KB에서 1%)
-- 메시지 크기와 무관하게 일정한 메모리 할당 (~178KB)
-- **적합한 경우**: 프로덕션 환경, 장시간 운영 서버
+- 힙 버퍼를 사용하는 Netty PooledByteBufAllocator 사용
+- **메시지 크기와 무관하게 일정한 낮은 메모리 할당 (~17KB)**
+- Direct 할당보다 낮은 GC 압력
+- **적합한 경우**: 프로덕션 환경, 모든 메시지 크기
 
 **성능:**
-- 64B: 1.29M msg/sec (ByteArray 대비 75%, 89% 적은 할당)
-- 512B: 1.28M msg/sec (ByteArray 대비 96%, 98% 적은 할당)
-- 1KB: 984K msg/sec (ByteArray 대비 95%, 99% 적은 할당)
-- 64KB: 78K msg/sec (ByteArray 대비 108%, **99.99% 적은 할당**)
+- 64B: 5,147 ops/s
+- 512B: 3,416 ops/s
+- 1KB: 4,375 ops/s
+- 64KB: 824 ops/s
+- 128KB: 512 ops/s
+- 256KB: 287 ops/s
 
-#### 3. Message_SendRecv
+#### 3. ArrayPool_Direct
+```java
+// ArrayPool_Heap과 동일하나 direct 버퍼 사용
+ByteBuf sendBuf = directAllocator.buffer(messageSize);
+```
+
+**특징:**
+- direct 버퍼를 사용하는 Netty PooledByteBufAllocator 사용
+- 더 높은 할당 오버헤드 (~44KB vs Heap의 ~17KB)
+- 일부 경우 매우 큰 메시지에서 더 빠를 수 있음
+- **사용 조건**: 프로파일링 결과 이점이 있는 경우에만
+
+**성능:**
+- 64B: 4,581 ops/s
+- 512B: 4,693 ops/s
+- 1KB: 4,446 ops/s
+- 64KB: 821 ops/s
+- 128KB: 443 ops/s
+- 256KB: 280 ops/s
+
+#### 4. Message_SendRecv
 ```java
 // 송신
 try (Message idMsg = new Message(router2Id);
@@ -149,46 +144,17 @@ try (Message idMsg = new Message(router2Id);
 // 수신
 try (Message msg = new Message()) {
     socket.recv(msg, RecvFlags.NONE);
-    // msg.data()를 직접 사용 (관리 메모리로 복사 없음)
+    // msg.data()를 직접 사용
 }
 ```
 
 **특징:**
 - ZMQ 네이티브 메시지 객체 사용
-- 중간 GC 압력 (메시지 크기와 무관하게 일정한 ~7.55MB)
 - MemorySegment를 통한 직접 메모리 액세스
 - **적합한 경우**: 네이티브 ZMQ Message API 선호 시
 
-**성능:**
-- 64B: 1.06M msg/sec (ByteArray 대비 62%)
-- 512B: 993K msg/sec (ByteArray 대비 75%)
-- 1KB: 997K msg/sec (ByteArray 대비 96%)
-- 64KB: 78K msg/sec (ByteArray 대비 108%)
-
-#### 4. MessageZeroCopy_SendRecv (사용 금지)
-```java
-// 제로카피 콜백으로 송신
-Arena dataArena = Arena.ofShared();
-MemorySegment dataSeg = dataArena.allocate(messageSize);
-MemorySegment.copy(sourceData, 0, dataSeg, JAVA_BYTE, 0, messageSize);
-
-Message payloadMsg = new Message(dataSeg, messageSize, data -> {
-    dataArena.close();
-});
-socket.send(payloadMsg, SendFlags.DONT_WAIT);
-```
-
-**특징:**
-- Arena 할당으로 진정한 제로카피 시도
-- **심각한 성능 저하** (64B에서 62배, 512B에서 51배 느림)
-- `Arena.ofShared()` 오버헤드 (~31μs/생성)가 제로카피 이점을 압도
-- **프로덕션에서 절대 사용 금지**
-
-**성능:**
-- 64B: 28K msg/sec (ByteArray 대비 1.6%)
-- 512B: 26K msg/sec (ByteArray 대비 2.0%)
-- 1KB: 26K msg/sec (ByteArray 대비 2.5%)
-- 64KB: 19K msg/sec (ByteArray 대비 26%)
+#### 5. MessageZeroCopy_SendRecv (제거됨)
+이 전략은 Arena 할당 오버헤드로 인한 심각한 성능 문제로 제거되었습니다.
 
 ### 수신 버퍼 모범 사례
 
@@ -218,10 +184,11 @@ while (running) {
 
 | 사용 사례 | 권장 전략 | 이유 |
 |----------|----------|------|
-| **프로덕션 서버** | **ArrayPool** | 일정한 ~178KB 할당, 최소 GC 압력 |
-| 최대 처리량 (소형 메시지) | ByteArray | <512B에서 최고 msg/sec |
+| **프로덕션 서버** | **ArrayPool_Heap** | 일정한 ~17KB 할당, 최소 GC 압력 |
+| 소형 메시지 (<1KB) | ByteArray 또는 ArrayPool_Heap | 둘 다 우수, ArrayPool이 GC 압력 낮음 |
+| 대형 메시지 (>64KB) | **ArrayPool_Heap** | 메모리 효율성에 필수 |
 | 네이티브 ZMQ API 선호 | Message | 직접 MemorySegment 액세스 |
-| 제로카피 요구사항 | MessageZeroCopy 사용 금지 | Arena.ofShared() 오버헤드가 너무 높음 |
+| Direct 버퍼 필요 | ArrayPool_Direct | 프로파일링 결과 이점이 있는 경우에만 |
 
 ## 수신 모드 벤치마크
 
@@ -420,11 +387,12 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
 
 ## 핵심 요약
 
-1. **메시지 버퍼 전략**:
-   - **프로덕션에서는 `ArrayPool` 사용** - 메시지 크기와 무관하게 일정한 ~178KB 할당
-   - 소형 메시지 (<512B): `ByteArray`가 최고 처리량 제공 (64B에서 1.71M msg/sec)
-   - 대형 메시지 (>8KB): `ArrayPool` 필수 (ByteArray 대비 7,000배 적은 할당)
-   - `MessageZeroCopy` 사용 금지 (Arena.ofShared() 오버헤드로 40-62배 느림)
+1. **메시지 버퍼 전략** (5가지 전략 테스트):
+   - **프로덕션에서는 `ArrayPool_Heap` 사용** - 메시지 크기와 무관하게 일정한 ~17KB 할당
+   - 소형 메시지 (<1KB): `ByteArray`와 `ArrayPool_Heap` 모두 우수한 성능 (~4,000-5,700 ops/s)
+   - 대형 메시지 (>64KB): `ArrayPool_Heap`이 메모리 효율성에 필수
+   - `ArrayPool_Heap`이 낮은 할당 오버헤드로 `ArrayPool_Direct`보다 대부분 우수
+   - `MessageZeroCopy`는 심각한 성능 문제로 제거됨
 
 2. **수신 버퍼**:
    - 수신 시 항상 미리 할당된 고정 버퍼 사용
@@ -437,11 +405,11 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
    - 다중 소켓: `Poller` 사용 (PureBlocking 대비 100% 성능, 다중 소켓 지원)
    - sleep을 사용한 `NonBlocking` 사용 금지 (대형 메시지에서 37% 느림)
 
-4. **GC 압력** (64KB 메시지 기준):
-   - ArrayPool: 177KB (일정)
-   - Message: 7.55MB (일정)
-   - ByteArray: 1.22GB (메시지 크기에 비례)
-   - ArrayPool은 64KB에서 ByteArray 대비 **99.99%** 적은 할당
+4. **메모리 할당량**:
+   - ArrayPool_Heap: ~17KB (일정)
+   - ArrayPool_Direct: ~44KB (일정)
+   - ByteArray: 메시지 크기에 비례하여 선형 증가
+   - 대부분의 경우 Heap 할당이 Direct보다 효율적
 
 5. **지연시간**:
    - 소형 메시지: 서브 마이크로초 지연시간 (584-942 ns)

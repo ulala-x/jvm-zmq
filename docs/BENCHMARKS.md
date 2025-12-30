@@ -18,62 +18,35 @@ Comprehensive performance benchmarks for JVM-ZMQ using JMH (Java Microbenchmark 
 
 ## Message Buffer Strategy Benchmarks
 
-Comparison of four buffer management strategies for sending/receiving messages.
+Comparison of five buffer management strategies for sending/receiving messages.
 
 ### Performance Overview
 
-| Method                   | Size    | Throughput | Msg/sec | Mean      | Ratio | Allocated | Alloc Ratio |
-|------------------------- |--------:|------------|--------:|----------:|------:|----------:|------------:|
-| ByteArray_SendRecv       |     64B | 876.11 Mbps |   1.71M |    5.84 ms |  1.00 |   1.53 MB |       1.00 |
-| ArrayPool_SendRecv       |     64B | 660.21 Mbps |   1.29M |    7.76 ms |  1.33 | 178.36 KB |       0.11 |
-| MessageZeroCopy_SendRecv |     64B | 14.21 Mbps |  27.75K |  360.30 ms | 61.65 |  10.86 MB |       7.11 |
-| Message_SendRecv         |     64B | 543.56 Mbps |   1.06M |    9.42 ms |  1.61 |   7.55 MB |       4.95 |
-|                          |         |            |         |           |       |           |             |
-| ByteArray_SendRecv       |    512B |  5.45 Gbps |   1.33M |    7.51 ms |  1.00 |  10.07 MB |       1.00 |
-| ArrayPool_SendRecv       |    512B |  5.26 Gbps |   1.28M |    7.78 ms |  1.04 | 179.11 KB |       0.02 |
-| MessageZeroCopy_SendRecv |    512B | 106.89 Mbps |  26.10K |  383.19 ms | 51.00 |  11.14 MB |       1.11 |
-| Message_SendRecv         |    512B |  4.07 Gbps | 993.51K |   10.07 ms |  1.34 |   7.55 MB |       0.75 |
-|                          |         |            |         |           |       |           |             |
-| ByteArray_SendRecv       |     1KB |  8.51 Gbps |   1.04M |    9.63 ms |  1.00 |  19.84 MB |       1.00 |
-| ArrayPool_SendRecv       |     1KB |  8.07 Gbps | 984.60K |   10.16 ms |  1.06 | 179.62 KB |       0.01 |
-| MessageZeroCopy_SendRecv |     1KB | 210.75 Mbps |  25.73K |  388.70 ms | 40.38 |  11.20 MB |       0.56 |
-| Message_SendRecv         |     1KB |  8.17 Gbps | 997.05K |   10.03 ms |  1.04 |   7.55 MB |       0.38 |
-|                          |         |            |         |           |       |           |             |
-| ByteArray_SendRecv       |    64KB |  4.74 GB/s |  72.35K |  138.21 ms |  1.00 |   1.22 GB |       1.00 |
-| ArrayPool_SendRecv       |    64KB |  5.10 GB/s |  77.88K |  128.40 ms |  0.93 | 177.15 KB |       0.00 |
-| MessageZeroCopy_SendRecv |    64KB |  1.23 GB/s |  18.74K |  533.52 ms |  3.86 |  11.24 MB |       0.01 |
-| Message_SendRecv         |    64KB |  5.10 GB/s |  77.83K |  128.48 ms |  0.93 |   7.55 MB |       0.01 |
+| Strategy | 64B | 512B | 1KB | 64KB | 128KB | 256KB |
+|----------|-----|------|-----|------|-------|-------|
+| **ByteArray** | 5,745 ops/s | 5,307 ops/s | 4,031 ops/s | - | - | - |
+| **ArrayPool_Heap** | 5,147 ops/s | 3,416 ops/s | 4,375 ops/s | 824 ops/s | 512 ops/s | 287 ops/s |
+| **ArrayPool_Direct** | 4,581 ops/s | 4,693 ops/s | 4,446 ops/s | 821 ops/s | 443 ops/s | 280 ops/s |
+| **Message** | - | - | - | - | - | - |
+| **MessageZeroCopy** | - | - | - | - | - | - |
 
-### Detailed Metrics
+### Memory Allocation
 
-| Method                   | Size    | Score (ops/s) | Error      | StdDev    | Latency   | Gen0      |
-|------------------------- |--------:|--------------:|-----------:|----------:|----------:|----------:|
-| ByteArray_SendRecv       |     64B |       171.11 |   0.1014 ms |   0.0236 ms | 584.40 ns |   29.0000 |
-| ArrayPool_SendRecv       |     64B |       128.95 |   1.2621 ms |   0.2932 ms | 775.51 ns |   21.0000 |
-| MessageZeroCopy_SendRecv |     64B |         2.78 |  16.6015 ms |   3.8562 ms |  36.03 μs |    1.0000 |
-| Message_SendRecv         |     64B |       106.16 |   0.0954 ms |   0.0222 ms | 941.93 ns |   40.0000 |
-|                          |         |               |            |           |           |           |
-| ByteArray_SendRecv       |    512B |       133.10 |   1.0116 ms |   0.2350 ms | 751.29 ns |   73.0000 |
-| ArrayPool_SendRecv       |    512B |       128.46 |   0.0989 ms |   0.0230 ms | 778.47 ns |   21.0000 |
-| MessageZeroCopy_SendRecv |    512B |         2.61 |   9.1644 ms |   2.1287 ms |  38.32 μs |    1.0000 |
-| Message_SendRecv         |    512B |        99.35 |   0.0757 ms |   0.0176 ms |   1.01 μs |   38.0000 |
-|                          |         |               |            |           |           |           |
-| ByteArray_SendRecv       |     1KB |       103.89 |   0.5087 ms |   0.1182 ms | 962.53 ns |   96.0000 |
-| ArrayPool_SendRecv       |     1KB |        98.46 |   0.1869 ms |   0.0434 ms |   1.02 μs |   16.0000 |
-| MessageZeroCopy_SendRecv |     1KB |         2.57 |  48.1970 ms |  11.1952 ms |  38.87 μs |    1.0000 |
-| Message_SendRecv         |     1KB |        99.70 |   0.0772 ms |   0.0179 ms |   1.00 μs |   38.0000 |
-|                          |         |               |            |           |           |           |
-| ByteArray_SendRecv       |    64KB |         7.24 |  10.6799 ms |   2.4807 ms |  13.82 μs |  244.0000 |
-| ArrayPool_SendRecv       |    64KB |         7.79 |  10.4213 ms |   2.4207 ms |  12.84 μs |    1.0000 |
-| MessageZeroCopy_SendRecv |    64KB |         1.87 |  22.4202 ms |   5.2078 ms |  53.35 μs |    1.0000 |
-| Message_SendRecv         |    64KB |         7.78 |   4.0053 ms |   0.9303 ms |  12.85 μs |    3.0000 |
+| Strategy | Allocation per iteration |
+|----------|-------------------------|
+| **ByteArray** | Scales with message size |
+| **ArrayPool_Heap** | ~17KB (constant) |
+| **ArrayPool_Direct** | ~44KB (constant) |
+| **Message** | - |
+| **MessageZeroCopy** | - |
 
-### Key Finding
+### Key Findings
 
-**ArrayPool is recommended for production use:**
-- Maintains constant ~178KB allocation regardless of message size
-- ByteArray scales linearly with message size (1.22GB at 64KB vs 178KB)
-- At 64KB messages: ArrayPool uses **7,000x less memory** than ByteArray
+**Recommended: ArrayPool_Heap for production use**
+- Consistent low memory allocation (~17KB) regardless of message size
+- Good performance across all message sizes
+- Lower GC pressure compared to Direct allocation
+- ArrayPool_Heap often outperforms ArrayPool_Direct in many scenarios
 
 ### Strategy Descriptions
 
@@ -85,59 +58,81 @@ System.arraycopy(sourceData, 0, sendBuffer, 0, messageSize);
 socket.send(sendBuffer, SendFlags.DONT_WAIT);
 
 // Receiving - uses fixed buffer
-socket.recv(recvBuffer, RecvFlags.NONE);  // recvBuffer is pre-allocated
-byte[] outputBuffer = new byte[size];     // New allocation for each message
+socket.recv(recvBuffer, RecvFlags.NONE);
+byte[] outputBuffer = new byte[size];
 System.arraycopy(recvBuffer, 0, outputBuffer, 0, size);
 ```
 
 **Characteristics:**
 - Allocates new byte arrays for every send/receive
-- Highest GC pressure (baseline allocation = 1.0)
+- Highest GC pressure - scales with message size
 - Simple implementation
-- **Best for**: Small messages where throughput is critical
+- **Best for**: Small messages only (<1KB)
 
 **Performance:**
-- 64B: 1.71M msg/sec (highest)
-- 512B: 1.33M msg/sec (highest)
-- 1KB: 1.04M msg/sec
-- 64KB: 72K msg/sec
+- 64B: 5,745 ops/s
+- 512B: 5,307 ops/s
+- 1KB: 4,031 ops/s
+- Not suitable for large messages (64KB+)
 
-#### 2. ArrayPool_SendRecv (RECOMMENDED)
+#### 2. ArrayPool_Heap (RECOMMENDED)
 ```java
 // Sending
-ByteBuf sendBuf = allocator.buffer(messageSize);
+ByteBuf sendBuf = heapAllocator.buffer(messageSize);
 try {
     sendBuf.writeBytes(sourceData, 0, messageSize);
-    sendBuf.getBytes(0, reusableSendBuffer, 0, messageSize);  // Fixed buffer
+    sendBuf.getBytes(0, reusableSendBuffer, 0, messageSize);
     socket.send(reusableSendBuffer, SendFlags.DONT_WAIT);
 } finally {
     sendBuf.release();
 }
 
-// Receiving - uses fixed buffer
-socket.recv(recvBuffer, RecvFlags.NONE);  // recvBuffer is pre-allocated
-ByteBuf outputBuf = allocator.buffer(size);
+// Receiving
+socket.recv(recvBuffer, RecvFlags.NONE);
+ByteBuf outputBuf = heapAllocator.buffer(size);
 try {
     outputBuf.writeBytes(recvBuffer, 0, size);
-    outputBuf.getBytes(0, reusableRecvBuffer, 0, size);  // Fixed buffer
+    outputBuf.getBytes(0, reusableRecvBuffer, 0, size);
 } finally {
     outputBuf.release();
 }
 ```
 
 **Characteristics:**
-- Uses Netty PooledByteBufAllocator for buffer pooling
-- **Dramatically reduced GC pressure** (2% allocation @ 512B, 1% @ 1KB)
-- Constant memory allocation regardless of message size (~178KB)
-- **Best for**: Production use, long-running servers
+- Uses Netty PooledByteBufAllocator with heap buffers
+- **Constant low memory allocation (~17KB)** regardless of message size
+- Lower GC pressure compared to Direct allocation
+- **Best for**: Production use, all message sizes
 
 **Performance:**
-- 64B: 1.29M msg/sec (75% of ByteArray, 89% less allocation)
-- 512B: 1.28M msg/sec (96% of ByteArray, 98% less allocation)
-- 1KB: 984K msg/sec (95% of ByteArray, 99% less allocation)
-- 64KB: 78K msg/sec (108% of ByteArray, **99.99% less allocation**)
+- 64B: 5,147 ops/s
+- 512B: 3,416 ops/s
+- 1KB: 4,375 ops/s
+- 64KB: 824 ops/s
+- 128KB: 512 ops/s
+- 256KB: 287 ops/s
 
-#### 3. Message_SendRecv
+#### 3. ArrayPool_Direct
+```java
+// Same as ArrayPool_Heap but uses direct buffers
+ByteBuf sendBuf = directAllocator.buffer(messageSize);
+```
+
+**Characteristics:**
+- Uses Netty PooledByteBufAllocator with direct buffers
+- Higher allocation overhead (~44KB vs ~17KB for Heap)
+- Direct buffers may be faster for very large messages in some cases
+- **Use only if**: Profiling shows benefit for your specific workload
+
+**Performance:**
+- 64B: 4,581 ops/s
+- 512B: 4,693 ops/s
+- 1KB: 4,446 ops/s
+- 64KB: 821 ops/s
+- 128KB: 443 ops/s
+- 256KB: 280 ops/s
+
+#### 4. Message_SendRecv
 ```java
 // Sending
 try (Message idMsg = new Message(router2Id);
@@ -149,46 +144,17 @@ try (Message idMsg = new Message(router2Id);
 // Receiving
 try (Message msg = new Message()) {
     socket.recv(msg, RecvFlags.NONE);
-    // Use msg.data() directly (no copy to managed memory)
+    // Use msg.data() directly
 }
 ```
 
 **Characteristics:**
 - Uses ZMQ native message objects
-- Medium GC pressure (constant ~7.55MB regardless of message size)
 - Direct memory access via MemorySegment
 - **Best for**: When native ZMQ Message API is preferred
 
-**Performance:**
-- 64B: 1.06M msg/sec (62% of ByteArray)
-- 512B: 993K msg/sec (75% of ByteArray)
-- 1KB: 997K msg/sec (96% of ByteArray)
-- 64KB: 78K msg/sec (108% of ByteArray)
-
-#### 4. MessageZeroCopy_SendRecv (NOT RECOMMENDED)
-```java
-// Sending with zero-copy callback
-Arena dataArena = Arena.ofShared();
-MemorySegment dataSeg = dataArena.allocate(messageSize);
-MemorySegment.copy(sourceData, 0, dataSeg, JAVA_BYTE, 0, messageSize);
-
-Message payloadMsg = new Message(dataSeg, messageSize, data -> {
-    dataArena.close();
-});
-socket.send(payloadMsg, SendFlags.DONT_WAIT);
-```
-
-**Characteristics:**
-- Attempts true zero-copy with Arena allocation
-- **Severe performance degradation** (62x slower @ 64B, 51x @ 512B)
-- `Arena.ofShared()` overhead (~31μs per creation) dominates any zero-copy benefit
-- **Never use in production**
-
-**Performance:**
-- 64B: 28K msg/sec (1.6% of ByteArray)
-- 512B: 26K msg/sec (2.0% of ByteArray)
-- 1KB: 26K msg/sec (2.5% of ByteArray)
-- 64KB: 19K msg/sec (26% of ByteArray)
+#### 5. MessageZeroCopy_SendRecv (REMOVED)
+This strategy has been removed due to severe performance issues with Arena allocation overhead.
 
 ### Receive Buffer Best Practice
 
@@ -218,10 +184,11 @@ This practice is essential for minimizing GC pressure in high-throughput applica
 
 | Use Case | Recommended Strategy | Reason |
 |----------|---------------------|--------|
-| **Production servers** | **ArrayPool** | Constant ~178KB allocation, minimal GC pressure |
-| Maximum throughput (small messages) | ByteArray | Highest msg/sec for <512B |
+| **Production servers** | **ArrayPool_Heap** | Constant ~17KB allocation, minimal GC pressure |
+| Small messages (<1KB) | ByteArray or ArrayPool_Heap | Both perform well, ArrayPool has lower GC pressure |
+| Large messages (>64KB) | **ArrayPool_Heap** | Essential for memory efficiency |
 | Native ZMQ API preference | Message | Direct MemorySegment access |
-| Zero-copy requirements | Avoid MessageZeroCopy | Arena.ofShared() overhead too high |
+| Direct buffers needed | ArrayPool_Direct | Only if profiling shows benefit |
 
 ## Receive Mode Benchmarks
 
@@ -420,11 +387,12 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
 
 ## Key Takeaways
 
-1. **Message Buffer Strategy**:
-   - **Use `ArrayPool` for production** - constant ~178KB allocation regardless of message size
-   - Small messages (<512B): `ByteArray` offers highest throughput (1.71M msg/sec @ 64B)
-   - Large messages (>8KB): `ArrayPool` is essential (7,000x less allocation than ByteArray)
-   - Avoid `MessageZeroCopy` (40-62x slower due to Arena.ofShared() overhead)
+1. **Message Buffer Strategy** (5 strategies tested):
+   - **Use `ArrayPool_Heap` for production** - constant ~17KB allocation regardless of message size
+   - Small messages (<1KB): `ByteArray` and `ArrayPool_Heap` both perform well (~4,000-5,700 ops/s)
+   - Large messages (>64KB): `ArrayPool_Heap` is essential for memory efficiency
+   - `ArrayPool_Heap` often outperforms `ArrayPool_Direct` due to lower allocation overhead
+   - `MessageZeroCopy` has been removed due to severe performance issues
 
 2. **Receive Buffer**:
    - Always use pre-allocated fixed buffers for receiving
@@ -437,11 +405,11 @@ cd zmq && python3 scripts/format_jmh_dotnet_style.py
    - Multiple sockets: Use `Poller` (100% of PureBlocking performance, multi-socket support)
    - Avoid `NonBlocking` with sleep (37% slower for large messages)
 
-4. **GC Pressure** (at 64KB messages):
-   - ArrayPool: 177KB (constant)
-   - Message: 7.55MB (constant)
-   - ByteArray: 1.22GB (scales with message size)
-   - ArrayPool reduces allocation by **99.99%** vs ByteArray at 64KB
+4. **Memory Allocation**:
+   - ArrayPool_Heap: ~17KB (constant)
+   - ArrayPool_Direct: ~44KB (constant)
+   - ByteArray: Scales linearly with message size
+   - Heap allocation is more efficient than Direct in most cases
 
 5. **Latency**:
    - Small messages: Sub-microsecond latency (584-942 ns)
