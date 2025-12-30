@@ -20,14 +20,14 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <h2>Architecture</h2>
  * <ul>
- *   <li><strong>19 Size Buckets:</strong> Messages are allocated in power-of-2 size buckets
- *       from 16 bytes to 4 megabytes</li>
+ *   <li><strong>16 Size Buckets:</strong> Messages are allocated in power-of-2 size buckets
+ *       from 128 bytes to 4 megabytes (messages &le; 64 bytes are not pooled)</li>
  *   <li><strong>Thread-Local Cache (Tier 1):</strong> Each thread maintains a fast cache
  *       with up to 8 messages per bucket for lock-free access</li>
  *   <li><strong>Shared Pool (Tier 2):</strong> A global {@link ConcurrentLinkedQueue} per bucket
  *       provides thread-safe sharing when thread-local caches are exhausted</li>
- *   <li><strong>Zero-Copy Integration:</strong> Uses {@code zmq_msg_init_data} to enable
- *       zero-copy message passing with automatic pool return via callbacks</li>
+ *   <li><strong>Small Message Optimization:</strong> Messages &le; 64 bytes bypass pooling
+ *       and use regular {@link Message} allocation for better performance</li>
  * </ul>
  *
  * <h2>Usage Example</h2>
@@ -77,10 +77,11 @@ public final class MessagePool {
     // ========== Constants ==========
 
     /**
-     * Bucket sizes in bytes (19 buckets: 16B to 4MB).
+     * Bucket sizes in bytes (16 buckets: 128B to 4MB).
+     * Note: Messages <= 64 bytes are not pooled and use regular Message allocation.
      */
     private static final int[] BUCKET_SIZES = {
-        16, 32, 64, 128, 256, 512,
+        128, 256, 512,
         1024, 2048, 4096, 8192, 16384, 32768,
         65536, 131072, 262144, 524288,
         1048576, 2097152, 4194304
@@ -89,7 +90,7 @@ public final class MessagePool {
     /**
      * Number of buckets.
      */
-    private static final int BUCKET_COUNT = 19;
+    private static final int BUCKET_COUNT = 16;
 
     /**
      * Maximum messages per bucket in thread-local cache.
@@ -100,7 +101,7 @@ public final class MessagePool {
      * Default maximum buffers per bucket in shared pool.
      */
     private final int[] maxBuffersPerBucket = {
-        1000, 1000, 1000, 1000, 1000, 1000,    // 16B ~ 512B
+        1000, 1000, 1000,                      // 128B ~ 512B
         1000, 500, 500, 500, 250, 250,         // 1K ~ 32K
         100, 100, 100, 100,                    // 64K ~ 512K
         50, 50, 50                             // 1M ~ 4M
@@ -182,6 +183,11 @@ public final class MessagePool {
             throw new IllegalArgumentException("size cannot be negative: " + size);
         }
 
+        // Messages <= 64 bytes are not pooled, create regular Message
+        if (size <= 64) {
+            return new Message(size);
+        }
+
         // Select appropriate bucket
         int bucketIndex = selectBucket(size);
         int bucketSize = BUCKET_SIZES[bucketIndex];
@@ -225,6 +231,11 @@ public final class MessagePool {
     public Message rent(byte[] data) {
         if (data == null) {
             throw new NullPointerException("data cannot be null");
+        }
+
+        // Messages <= 64 bytes are not pooled, create regular Message
+        if (data.length <= 64) {
+            return new Message(data);
         }
 
         Message msg = rent(data.length);
@@ -373,17 +384,17 @@ public final class MessagePool {
      * Selects the appropriate bucket index for the given size.
      *
      * @param size The requested size in bytes
-     * @return The bucket index (0-18)
+     * @return The bucket index (0-15)
      */
     private static int selectBucket(int size) {
-        if (size <= 16) {
-            return 0;
+        if (size <= 128) {
+            return 0;  // Minimum bucket: 128 bytes
         }
 
         // Find the smallest bucket that fits the size
         // Using Integer.numberOfLeadingZeros for fast power-of-2 computation
         int bits = 32 - Integer.numberOfLeadingZeros(size - 1);
-        int bucketIndex = bits - 4; // 2^4 = 16 (first bucket)
+        int bucketIndex = bits - 7; // 2^7 = 128 (first bucket)
 
         if (bucketIndex >= BUCKET_COUNT) {
             return BUCKET_COUNT - 1; // Max bucket

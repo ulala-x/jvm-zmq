@@ -74,12 +74,14 @@ class MessagePoolTest {
         @DisplayName("Should select appropriate bucket for size")
         void should_Select_Appropriate_Bucket() {
             // When: Rent messages of various sizes
-            Message msg1 = pool.rent(10);     // Should use 16-byte bucket
+            Message msg1 = pool.rent(10);     // <= 64 bytes: not pooled
             Message msg2 = pool.rent(100);    // Should use 128-byte bucket
             Message msg3 = pool.rent(1000);   // Should use 1024-byte bucket
 
-            // Then: Bucket sizes should be power of 2
-            assertThat(msg1.getBufferSize()).isEqualTo(16);
+            // Then: For messages <= 64 bytes, bufferSize is -1 (not pooled)
+            // For pooled messages, buffer size should be power of 2
+            assertThat(msg1.getBufferSize()).isEqualTo(-1);  // Not pooled
+            assertThat(msg1.size()).isEqualTo(10);           // Actual size
             assertThat(msg2.getBufferSize()).isEqualTo(128);
             assertThat(msg3.getBufferSize()).isEqualTo(1024);
 
@@ -296,10 +298,10 @@ class MessagePoolTest {
             // When: Get pool counts
             Map<Integer, Integer> counts = pool.getPoolCounts();
 
-            // Then: Should have 19 buckets
+            // Then: Should have 16 buckets (128B to 4MB)
             assertThat(counts)
                     .as("Pool counts map")
-                    .hasSize(19);
+                    .hasSize(16);
 
             // All counts should be non-negative
             for (Integer count : counts.values()) {

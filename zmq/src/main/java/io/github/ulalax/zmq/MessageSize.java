@@ -3,86 +3,79 @@ package io.github.ulalax.zmq;
 /**
  * Predefined message size buckets for memory pooling and allocation optimization.
  *
- * <p>This enum provides 19 size buckets ranging from 16 bytes to 4 megabytes,
+ * <p>This enum provides 16 size buckets ranging from 128 bytes to 4 megabytes,
  * each being a power of 2. These buckets are designed for efficient message
  * buffer management and memory pool allocation strategies.</p>
  *
+ * <p><strong>Note:</strong> Messages <= 64 bytes are not pooled and use regular Message allocation.</p>
+ *
  * <p><strong>Size Categories:</strong></p>
  * <ul>
- *   <li><strong>Tiny (16B - 256B):</strong> Small control messages, headers</li>
- *   <li><strong>Small (512B - 4KB):</strong> Standard messages, most common use case</li>
- *   <li><strong>Medium (8KB - 64KB):</strong> Larger payloads, serialized objects</li>
- *   <li><strong>Large (128KB - 1MB):</strong> File chunks, batch data</li>
+ *   <li><strong>Small (128B - 512B):</strong> Small control messages, headers</li>
+ *   <li><strong>Medium (1KB - 4KB):</strong> Standard messages, most common use case</li>
+ *   <li><strong>Large (8KB - 64KB):</strong> Larger payloads, serialized objects</li>
+ *   <li><strong>Very Large (128KB - 1MB):</strong> File chunks, batch data</li>
  *   <li><strong>Extra Large (2MB - 4MB):</strong> Large files, bulk transfers</li>
  * </ul>
  *
  * <p><strong>Usage Example:</strong></p>
  * <pre>{@code
  * // Find appropriate bucket for a 1000-byte message
- * MessageSize size = MessageSize.of(1000);  // Returns SIZE_1024
+ * MessageSize size = MessageSize.of(1000);  // Returns SIZE_1K
  * int bufferSize = size.getBytes();         // Returns 1024
- * int index = size.getBucketIndex();        // Returns 6
+ * int index = size.getBucketIndex();        // Returns 3
  * }</pre>
  *
  * @see Message
  */
 public enum MessageSize {
-    /** 16 bytes - Minimum bucket size for tiny messages */
-    SIZE_16(16, 0),
-
-    /** 32 bytes */
-    SIZE_32(32, 1),
-
-    /** 64 bytes */
-    SIZE_64(64, 2),
-
-    /** 128 bytes */
-    SIZE_128(128, 3),
+    /** 128 bytes - Minimum bucket size for pooled messages */
+    SIZE_128(128, 0),
 
     /** 256 bytes */
-    SIZE_256(256, 4),
+    SIZE_256(256, 1),
 
     /** 512 bytes */
-    SIZE_512(512, 5),
+    SIZE_512(512, 2),
 
     /** 1 kilobyte (1024 bytes) */
-    SIZE_1K(1024, 6),
+    SIZE_1K(1024, 3),
 
     /** 2 kilobytes (2048 bytes) */
-    SIZE_2K(2048, 7),
+    SIZE_2K(2048, 4),
 
     /** 4 kilobytes (4096 bytes) */
-    SIZE_4K(4096, 8),
+    SIZE_4K(4096, 5),
 
     /** 8 kilobytes (8192 bytes) */
-    SIZE_8K(8192, 9),
+    SIZE_8K(8192, 6),
 
     /** 16 kilobytes (16384 bytes) */
-    SIZE_16K(16384, 10),
+    SIZE_16K(16384, 7),
 
     /** 32 kilobytes (32768 bytes) */
-    SIZE_32K(32768, 11),
+    SIZE_32K(32768, 8),
 
     /** 64 kilobytes (65536 bytes) */
-    SIZE_64K(65536, 12),
+    SIZE_64K(65536, 9),
 
     /** 128 kilobytes (131072 bytes) */
-    SIZE_128K(131072, 13),
+    SIZE_128K(131072, 10),
 
     /** 256 kilobytes (262144 bytes) */
-    SIZE_256K(262144, 14),
+    SIZE_256K(262144, 11),
 
     /** 512 kilobytes (524288 bytes) */
-    SIZE_512K(524288, 15),
+    SIZE_512K(524288, 12),
 
     /** 1 megabyte (1048576 bytes) */
-    SIZE_1M(1048576, 16),
+    SIZE_1M(1048576, 13),
 
     /** 2 megabytes (2097152 bytes) */
-    SIZE_2M(2097152, 17),
+    SIZE_2M(2097152, 14),
 
     /** 4 megabytes (4194304 bytes) - Maximum bucket size */
-    SIZE_4M(4194304, 18);
+    SIZE_4M(4194304, 15);
 
     private final int bytes;
     private final int bucketIndex;
@@ -118,11 +111,13 @@ public enum MessageSize {
      *
      * <p>This method performs a linear search to find the appropriate bucket.
      * If the requested size is larger than the maximum bucket (4MB), it returns
-     * SIZE_4M. If the size is 0 or negative, it returns SIZE_16.</p>
+     * SIZE_4M. If the size is 0 or negative, it returns SIZE_128.</p>
+     *
+     * <p><strong>Note:</strong> Messages <= 64 bytes should not use this method as they are not pooled.</p>
      *
      * <p><strong>Examples:</strong></p>
      * <ul>
-     *   <li>{@code of(0)} returns SIZE_16</li>
+     *   <li>{@code of(0)} returns SIZE_128</li>
      *   <li>{@code of(100)} returns SIZE_128</li>
      *   <li>{@code of(1024)} returns SIZE_1K</li>
      *   <li>{@code of(1025)} returns SIZE_2K</li>
@@ -135,7 +130,7 @@ public enum MessageSize {
     public static MessageSize of(int size) {
         // Handle edge cases
         if (size <= 0) {
-            return SIZE_16;
+            return SIZE_128;
         }
 
         // Find the smallest bucket that fits the requested size

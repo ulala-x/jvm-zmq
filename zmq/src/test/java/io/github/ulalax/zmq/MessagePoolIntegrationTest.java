@@ -76,7 +76,8 @@ class MessagePoolIntegrationTest {
     @DisplayName("Should send and receive pooled message with size allocation")
     void should_Send_And_Receive_Pooled_Message_With_Size() throws InterruptedException {
         // Given: Rent a message and write data to it
-        String testText = "Pooled message test";
+        // Use larger size (> 64 bytes) to ensure it's pooled
+        String testText = "Pooled message test with extra data to exceed 64 byte limit for pooling";
         byte[] testData = testText.getBytes(StandardCharsets.UTF_8);
 
         Message sendMsg = pool.rent(testData.length);
@@ -137,9 +138,10 @@ class MessagePoolIntegrationTest {
                 .as("Initial rents")
                 .isEqualTo(0);
 
-        // When: Send multiple messages
+        // When: Send multiple messages (use > 64 bytes to ensure pooling)
         for (int i = 0; i < 5; i++) {
-            String data = "Test message " + i;
+            // Create message > 64 bytes to ensure it's pooled
+            String data = "Test message " + i + " with additional data to exceed 64 byte limit for pooling purposes";
             Message msg = pool.rent(data.getBytes(StandardCharsets.UTF_8));
             sender.send(msg, SendFlags.NONE);
             msg.close();
@@ -153,6 +155,7 @@ class MessagePoolIntegrationTest {
         }
 
         // Then: Statistics should show pool activity
+        // Note: Messages > 64 bytes are pooled, so totalRents should be 5
         MessagePool.PoolStatistics afterStats = pool.getStatistics();
         assertThat(afterStats.totalRents)
                 .as("Total rents after sending")
@@ -208,9 +211,12 @@ class MessagePoolIntegrationTest {
     @Test
     @DisplayName("Should show pool statistics after usage")
     void should_Show_Pool_Statistics_After_Usage() throws InterruptedException {
-        // Given: Send multiple messages
+        // Given: Send multiple messages (use > 64 bytes to ensure pooling)
         for (int i = 0; i < 20; i++) {
-            Message msg = pool.rent(("Message " + i).getBytes(StandardCharsets.UTF_8));
+            // Create message > 64 bytes to ensure it's pooled and tracked in statistics
+            // Add extra "X" to make sure all messages are > 64 bytes
+            String data = "Message " + i + " with extra padding to exceed 64 byte pooling threshold X";
+            Message msg = pool.rent(data.getBytes(StandardCharsets.UTF_8));
             sender.send(msg, SendFlags.NONE);
             msg.close();
         }
@@ -229,6 +235,7 @@ class MessagePoolIntegrationTest {
         MessagePool.PoolStatistics stats = pool.getStatistics();
 
         // Then: Statistics should be meaningful
+        // All messages > 64 bytes are pooled, so totalRents should be 20
         assertThat(stats.totalRents)
                 .as("Total rents")
                 .isEqualTo(20);
