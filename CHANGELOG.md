@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5] - 2025-12-30
 
+### Added
+- **ByteBuf support**: `Socket.send(ByteBuf)` and `Socket.recv(ByteBuf)` for Netty integration
+  - Supports both heap and direct buffers
+  - Enables efficient memory pooling with `PooledByteBufAllocator`
+- Netty dependency (`io.netty:netty-buffer`) now included as API dependency
+
 ### Removed
 - **MessagePool**: Removed custom message pooling system
   - Serialization libraries (Protobuf, etc.) don't support MemorySegment

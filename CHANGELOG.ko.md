@@ -12,6 +12,12 @@
 
 ## [0.5] - 2025-12-30
 
+### 추가됨
+- **ByteBuf 지원**: Netty 통합을 위한 `Socket.send(ByteBuf)` 및 `Socket.recv(ByteBuf)`
+  - Heap 및 Direct 버퍼 모두 지원
+  - `PooledByteBufAllocator`로 효율적인 메모리 풀링 가능
+- Netty 의존성 (`io.netty:netty-buffer`)이 API 의존성으로 포함됨
+
 ### 삭제됨
 - **MessagePool**: 커스텀 메시지 풀링 시스템 제거
   - 직렬화 라이브러리(Protobuf 등)가 MemorySegment를 지원하지 않음
